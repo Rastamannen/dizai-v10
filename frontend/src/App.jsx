@@ -3,8 +3,9 @@ import axios from "axios";
 import "./index.css";
 import logoUrl from "./assets/DizAi_FullLogo.svg";
 
+// Använd rätt Render-backend-URL beroende på frontend-domän
 const API_URL =
-  window.location.hostname.includes("onrender.com")
+  window.location.hostname.includes("dizai-front")
     ? "https://dizai-v09.onrender.com"
     : "http://localhost:3001";
 
@@ -31,14 +32,19 @@ export default function App() {
   const [audioUrl, setAudioUrl] = useState(null);
   const [mediaStream, setMediaStream] = useState(null);
   const mediaRecorderRef = useRef();
-
-  const exerciseSetId = "chatgpt-set"; // Placeholder, should come from GPT API
+  const [exerciseSetId, setExerciseSetId] = useState(null);
 
   useEffect(() => {
     axios
       .get(`${API_URL}/api/exercise_set?profile=${profile}`)
-      .then((res) => setExercises(res.data.exercises || []))
-      .catch(() => setExercises([]));
+      .then((res) => {
+        setExercises(res.data.exercises || []);
+        setExerciseSetId(res.data.exerciseSetId || "unknown-set");
+      })
+      .catch((err) => {
+        console.error("Error fetching exercises:", err);
+        setExercises([]);
+      });
   }, [profile]);
 
   useEffect(() => {
@@ -78,6 +84,7 @@ export default function App() {
         setFeedback(resp.data.feedback);
         setRecording(false);
       } catch (err) {
+        console.error("Analysis failed:", err);
         setFeedback("Error during analysis.");
         setRecording(false);
       }
