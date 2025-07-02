@@ -1,4 +1,4 @@
-// server.cjs - DizAí backend v1.0 (utan promptstyrning, helt agnostisk)
+// server.cjs - DizAí backend v1.0 (med övningsflöde kopplat till GPT via agnostisk polling)
 
 const express = require("express");
 const multer = require("multer");
@@ -6,6 +6,7 @@ const cors = require("cors");
 const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
+const { Readable } = require("stream");
 require("dotenv").config();
 
 const app = express();
@@ -15,33 +16,59 @@ const PORT = process.env.PORT || 10000;
 app.use(cors());
 app.use(express.json());
 
-let exerciseCache = {}; // { profileName: { exerciseSetId, exercises } }
-
-async function fetchExercises(profile) {
-  const response = await axios.post(
-    process.env.CHATGPT_EXERCISE_API_URL,
-    { profile },
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.CHATGPT_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-    }
-  );
-
-  const { exerciseSetId, exercises } = response.data;
-  exerciseCache[profile] = { exerciseSetId, exercises };
-  return { exerciseSetId, exercises };
-}
+let exerciseCache = {}; // structure: { profileName: { exerciseSetId, exercises } }
 
 app.get("/api/exercise_set", async (req, res) => {
   const profile = req.query.profile || "default";
 
   try {
-    const { exerciseSetId, exercises } = await fetchExercises(profile);
-    res.json({ exerciseSetId, exercises });
+    const response = await axios.post(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "user",
+            content: `DizAí is requesting the current active pronunciation exercises for profile '${profile}'.
+Return the current active exerciseSet in the following JSON format:
+{
+  "exerciseSetId": "set-abc123",
+  "exercises": [
+    {
+      "text": "Uma água sem gás, por favor.",
+      "ipa": "'umɐ 'aɡwɐ sɐ̃j 'ɡaʃ poɾ fɐ'voɾ",
+      "highlight": [1, 4],
+      "exerciseId": "ex-001"
+    }, ...
+  ]
+}`,
+          },
+        ],
+        temperature: 0.5,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    const { exerciseSetId, exercises } = JSON.parse(response.data.choices[0].message.content);
+
+    if (
+      !exerciseCache[profile] ||
+      exerciseCache[profile].exerciseSetId !== exerciseSetId
+    ) {
+      exerciseCache[profile] = { exerciseSetId, exercises };
+    }
+
+    res.json({
+      exerciseSetId: exerciseCache[profile].exerciseSetId,
+      exercises: exerciseCache[profile].exercises,
+    });
   } catch (err) {
-    console.error("Exercise fetch failed:", err);
+    console.error("GPT fetch failed:", err);
     res.status(500).json({ error: "Failed to fetch exercises" });
   }
 });
@@ -50,31 +77,14 @@ app.post("/api/analyze", upload.single("audio"), async (req, res) => {
   const { profile, exerciseId, exerciseSetId } = req.body;
   const audioBuffer = req.file.buffer;
 
-  // Simulated analysis — replace with real logic in v1.5
+  console.log(`Received analysis request from ${profile}, ex: ${exerciseId}`);
+
+  // Simulerad analys
   const transcript = "Simulerad transkription";
   const feedback = "Perfect pronunciation!";
 
-  // Feedback post-back (to ChatGPT or logging system)
-  try {
-    await axios.post(
-      process.env.CHATGPT_FEEDBACK_API_URL,
-      {
-        profile,
-        exerciseId,
-        exerciseSetId,
-        transcript,
-        feedback,
-      },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.CHATGPT_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-  } catch (err) {
-    console.warn("Feedback post-back failed:", err.message);
-  }
+  // TODO: logga till ChatGPT eller backend-lagring
+  console.log({ profile, exerciseId, exerciseSetId, transcript, feedback });
 
   res.json({ transcript, feedback });
 });
