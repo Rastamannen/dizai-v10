@@ -1,7 +1,7 @@
 {
   "name": "dizai-frontend",
   "version": "1.0.0",
-  "type": "module",
+  "type": "commonjs",
   "main": "src/main.jsx",
   "scripts": {
     "dev": "vite",
@@ -14,7 +14,7 @@
     "axios": "^1.6.2"
   },
   "devDependencies": {
-    "vite": "^4.4.9",
+    "vite": "^4.5.14",
     "@vitejs/plugin-react": "^4.2.1"
-}
+  }
 }
