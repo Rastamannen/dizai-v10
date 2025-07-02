@@ -1,4 +1,4 @@
-// server.cjs - DizAí backend v1.0 med strikt JSON-hantering och alla funktioner
+// server.cjs - DizAí backend v1.0 med strikt JSON-hantering och alla funktioner + fallback & loggning
 
 const express = require("express");
 const multer = require("multer");
@@ -20,8 +20,14 @@ let cachedExerciseSet = {
 
 async function fetchExercises(profile) {
   try {
+    const endpoint =
+      process.env.CHATGPT_EXERCISE_ENDPOINT ||
+      "https://api.openai.com/v1/chat/completions";
+
+    console.log("📡 Using GPT endpoint:", endpoint);
+
     const response = await axios.post(
-      process.env.CHATGPT_EXERCISE_ENDPOINT, // ✅ Korrekt variabel
+      endpoint,
       {
         model: "gpt-4o",
         messages: [
