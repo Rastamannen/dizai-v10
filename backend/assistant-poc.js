@@ -1,103 +1,52 @@
-// assistant-poc.js – DizAí Assistants API POC for testMessage
+// assistant-create.js – skapar GPT Assistant för DizAí-projektet
 
-const axios = require("axios");
+const OpenAI = require("openai");
 require("dotenv").config();
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
-const ASSISTANT_ID = process.env.OPENAI_ASSISTANT_ID;
-let threadId = null;
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-async function createThreadIfNeeded() {
-  if (threadId) return threadId;
-  const response = await axios.post(
-    "https://api.openai.com/v1/threads",
-    {},
-    {
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-        "OpenAI-Beta": "assistants=v2",
-        "Content-Type": "application/json",
-      },
-    }
-  );
-  threadId = response.data.id;
-  return threadId;
-}
-
-async function runTestMessagePrompt(prompt) {
-  const thread = await createThreadIfNeeded();
-
-  // Add message to thread
-  await axios.post(
-    `https://api.openai.com/v1/threads/${thread}/messages`,
-    {
-      role: "user",
-      content: prompt,
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-        "OpenAI-Beta": "assistants=v2",
-        "Content-Type": "application/json",
-      },
-    }
-  );
-
-  // Run the assistant on the thread
-  const runRes = await axios.post(
-    `https://api.openai.com/v1/threads/${thread}/runs`,
-    {
-      assistant_id: ASSISTANT_ID,
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${OPENAI_API_KEY}`,
-        "OpenAI-Beta": "assistants=v2",
-        "Content-Type": "application/json",
-      },
-    }
-  );
-
-  const runId = runRes.data.id;
-
-  // Poll for completion
-  let status = "queued";
-  let output = null;
-  while (status !== "completed") {
-    const res = await axios.get(
-      `https://api.openai.com/v1/threads/${thread}/runs/${runId}`,
-      {
-        headers: {
-          Authorization: `Bearer ${OPENAI_API_KEY}`,
-          "OpenAI-Beta": "assistants=v2",
-        },
-      }
-    );
-    status = res.data.status;
-    if (status === "completed") {
-      const msgRes = await axios.get(
-        `https://api.openai.com/v1/threads/${thread}/messages`,
-        {
-          headers: {
-            Authorization: `Bearer ${OPENAI_API_KEY}`,
-            "OpenAI-Beta": "assistants=v2",
-          },
-        }
-      );
-      output = msgRes.data.data[0].content[0].text.value;
-    }
-    await new Promise((r) => setTimeout(r, 1000));
-  }
-
-  console.log("\n🔄 Assistant Response:", output);
+async function createAssistant() {
   try {
-    const parsed = JSON.parse(output);
-    console.log("\n✅ Parsed JSON Response:", parsed);
+    const assistant = await openai.beta.assistants.create({
+      name: "DizAí Exercise Generator",
+      instructions: `
+Du är en språkcoach i projektet Johan och Petras Portugalträning. Du interagerar med DizAí via API och returnerar alltid strikt valid JSON enligt följande struktur:
+
+{
+  "exerciseSetId": "set-YYYYMMDDHHMM",
+  "exercises": [
+    {
+      "text": "...",
+      "ipa": "...",
+      "highlight": [start, end],
+      "exerciseId": "ex-..."
+    }
+  ]
+}
+
+⛔ Du får aldrig svara med något annat än exakt denna JSON-struktur. 
+⛔ Aldrig markdown, kommentarer eller naturligt språk. 
+✅ JSON måste vara parsbar direkt i JSON.parse().
+
+Om du inte kan returnera detta, returnerar du exakt:
+{ "error": "No valid exercise set could be generated from user context." }
+
+Du ska även kunna hantera test-instruktioner som:
+"DizAí, sätt testMessage till: 'Något härligt'"
+eller
+"Return the current testMessage as JSON."
+Då håller du detta internt inom run-state och svarar alltid med strikt JSON.
+      `,
+      model: "gpt-4o",
+      tools: [],
+    });
+
+    console.log("✅ Assistant created!");
+    console.log("Assistant ID:", assistant.id);
   } catch (err) {
-    console.error("\n❌ Invalid JSON:", output);
+    console.error("❌ Assistant creation failed:", err.message);
+    process.exit(1);
   }
 }
 
-// Example usage:
-const prompt = "DizAí, sätt testMessage till: \"Nu testar vi detta med Assistants API\"";
-runTestMessagePrompt(prompt);
+createAssistant();
