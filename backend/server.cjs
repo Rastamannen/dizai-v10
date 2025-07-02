@@ -1,4 +1,4 @@
-// server.cjs - DizAí backend v1.0 (med övningsflöde kopplat till GPT)
+// server.cjs - DizAí backend v1.0 med full implementering av användningsfall 1
 
 const express = require("express");
 const multer = require("multer");
@@ -54,6 +54,7 @@ Return as a JSON array like:
 
 app.get("/api/exercise_set", async (req, res) => {
   const profile = req.query.profile || "default";
+
   if (exerciseCache[profile]) {
     res.json({
       exerciseSetId: exerciseCache[profile].exerciseSetId,
@@ -74,14 +75,41 @@ app.post("/api/analyze", upload.single("audio"), async (req, res) => {
   const { profile, exerciseId, exerciseSetId } = req.body;
   const audioBuffer = req.file.buffer;
 
-  console.log(`Received analysis request from ${profile}, ex: ${exerciseId}`);
-
-  // Simulerad analys
+  // --- Simulerad analys ---
   const transcript = "Simulerad transkription";
   const feedback = "Perfect pronunciation!";
 
-  // TODO: logga till ChatGPT eller backend-lagring
-  console.log({ profile, exerciseId, exerciseSetId, transcript, feedback });
+  // --- Skicka till GPT (feedbackloop) ---
+  const logPrompt = `
+A user just completed an exercise in the DizAí platform.
+
+Profile: ${profile}
+Exercise ID: ${exerciseId}
+Exercise Set ID: ${exerciseSetId}
+Transcript: ${transcript}
+Feedback: ${feedback}
+
+Use this to refine future pronunciation exercises for this user.
+`;
+
+  try {
+    await axios.post(
+      "https://api.openai.com/v1/chat/completions",
+      {
+        model: "gpt-4o",
+        messages: [{ role: "user", content: logPrompt }],
+        temperature: 0.3,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+  } catch (err) {
+    console.warn("Could not send feedback to GPT:", err.message);
+  }
 
   res.json({ transcript, feedback });
 });
