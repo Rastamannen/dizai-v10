@@ -1,33 +1,20 @@
-import React from "react";
-import FullLogo from "./assets/DizAi_FullLogo.svg?react";
+// frontend/src/Header.jsx
 
-export default function Header() {
+import React from "react";
+
+const Header = ({ userId, setUserId }) => {
   return (
-    <header>
-      <div style={{ marginLeft: 24 }}>
-        <FullLogo style={{ height: 44, verticalAlign: "middle" }} />
-      </div>
+    <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem", background: "#e0e0e0" }}>
+      <h2>DizAí v1.0</h2>
       <div>
-        <span style={{
-          fontFamily: "'Nunito Sans', Poppins, Arial, sans-serif",
-          fontWeight: 800,
-          fontSize: 28,
-          color: "#0033A0",
-          letterSpacing: 1
-        }}>
-          DizAí
-        </span>
-        <span style={{
-          fontFamily: "'Nunito Sans', Poppins, Arial, sans-serif",
-          fontWeight: 800,
-          color: "#D1495B",
-          marginLeft: 3,
-          fontSize: 34,
-          verticalAlign: "middle"
-        }}>
-          í
-        </span>
+        <label>User:&nbsp;</label>
+        <select value={userId} onChange={(e) => setUserId(e.target.value)}>
+          <option value="johan">Johan</option>
+          <option value="petra">Petra</option>
+        </select>
       </div>
     </header>
   );
-}
+};
+
+export default Header;
