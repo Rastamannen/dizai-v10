@@ -98,11 +98,16 @@ app.get("/api/test_message", async (req, res) => {
         model: "gpt-4o",
         messages: [
           {
+            role: "system",
+            content:
+              "You are a data API. Respond ONLY with valid JSON. Never use markdown, quotes, or natural language. Only output valid parsable JSON.",
+          },
+          {
             role: "user",
-            content: "Return the current testMessage as JSON.",
+            content: `Return the current testMessage in this format: { "testMessage": "<your_message>" }`,
           },
         ],
-        temperature: 0.1,
+        temperature: 0.0,
       },
       {
         headers: {
