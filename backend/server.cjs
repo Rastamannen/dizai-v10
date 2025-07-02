@@ -1,4 +1,4 @@
-// server.cjs - DizAí backend v1.0 med strikt JSON-hantering och alla funktioner + fallback & loggning
+// server.cjs - DizAí backend v1.0 med strikt JSON-hantering, fallback, loggning + testMessage endpoint
 
 const express = require("express");
 const multer = require("multer");
@@ -84,6 +84,43 @@ app.get("/api/exercise_set", async (req, res) => {
     exerciseSetId: cachedExerciseSet.exerciseSetId,
     exercises: cachedExerciseSet.exercises,
   });
+});
+
+app.get("/api/test_message", async (req, res) => {
+  try {
+    const endpoint =
+      process.env.CHATGPT_EXERCISE_ENDPOINT ||
+      "https://api.openai.com/v1/chat/completions";
+
+    const response = await axios.post(
+      endpoint,
+      {
+        model: "gpt-4o",
+        messages: [
+          {
+            role: "user",
+            content: "Return the current testMessage as JSON.",
+          },
+        ],
+        temperature: 0.1,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    const content = response.data?.choices?.[0]?.message?.content?.trim();
+    if (!content) throw new Error("No content in GPT testMessage");
+
+    const parsed = JSON.parse(content);
+    res.json(parsed);
+  } catch (err) {
+    console.error("❌ GPT testMessage fetch failed:", err.message);
+    res.status(500).send("Test failed");
+  }
 });
 
 app.post("/api/analyze", upload.single("audio"), async (req, res) => {
