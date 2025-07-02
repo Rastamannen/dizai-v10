@@ -1,75 +1,50 @@
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
-const exercises = require("./exercises.json");
-const { analyzePronunciation } = require("./whisperUtil.cjs");
-const { ttsAudio } = require("./ttsUtil.cjs");
-const fs = require("fs");
-const path = require("path");
-
 const app = express();
+const PORT = process.env.PORT || 3001;
+
 app.use(cors());
 app.use(express.json());
-const upload = multer({ dest: "uploads/" });
 
-// ========= Logging helper ==========
-function log(...args) {
-  console.log(new Date().toISOString(), ...args);
-}
+const upload = multer();
 
-// === v10 routes ===
-const v10exerciseRoutes = require("./v10/routes/exercise");
-app.use("/api", v10exerciseRoutes);
+// Simulerad databas (ersätt med riktig GPT-källa i v1.5)
+let dummyExercises = {
+  Johan: [
+    { exerciseId: "ex1", text: "Olá, como estás?", ipa: "oˈla ˈkomu ɨʃˈtaʃ", highlight: [2] },
+    { exerciseId: "ex2", text: "Eu tenho um gato.", ipa: "ew ˈtɐɲu ũ ˈɡatu", highlight: [1, 3] },
+  ],
+  Petra: [
+    { exerciseId: "ex1", text: "Bom dia!", ipa: "bõ ˈdiɐ", highlight: [1] },
+    { exerciseId: "ex2", text: "Quero um café, por favor.", ipa: "ˈkɛɾu ũ kɐˈfɛ puɾ fɐˈvoɾ", highlight: [2, 4] },
+  ],
+};
 
-// === /analyze ===
-app.post("/analyze", upload.single("audio"), async (req, res) => {
-  log("Received /analyze request");
-  try {
-    const { profile, exerciseId } = req.body;
-    const filePath = req.file.path;
-    log(`Processing file: ${filePath} for profile=${profile} exerciseId=${exerciseId}`);
-    log("File size:", fs.statSync(filePath).size, "bytes");
-    const result = await analyzePronunciation(filePath, profile, exerciseId);
-    fs.unlinkSync(filePath); // remove uploaded webm
-    log("Done. Deleted original file:", filePath);
-    res.json(result);
-  } catch (err) {
-    log("❌ Error in /analyze:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// === /exercises ===
-app.get("/exercises", (req, res) => {
-  res.json(exercises);
-});
-
-// === /tts ===
-app.get("/tts", async (req, res) => {
-  const { text, type } = req.query;
-  log(`/tts request for text="${text}" type="${type}"`);
-  try {
-    const audioBuffer = await ttsAudio(text, type || "pt-PT");
-    res.set({
-      "Content-Type": "audio/mp3",
-      "Content-Disposition": 'inline; filename="tts.mp3"'
-    });
-    res.send(audioBuffer);
-  } catch (err) {
-    log("❌ Error in /tts:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// === /test ===
-app.get("/test", async (req, res) => {
+app.get("/api/exercise_set", (req, res) => {
   const profile = req.query.profile || "Johan";
-  const exerciseId = parseInt(req.query.exerciseId) || 0;
-  const filePath = path.join(__dirname, "sample.webm"); // adjust if needed
-  const result = await analyzePronunciation(filePath, profile, exerciseId);
-  res.json(result);
+  res.json({ exerciseSetId: "default-chatgpt-set", exercises: dummyExercises[profile] || [] });
 });
 
-app.listen(3001, () => {
-  console.log("DizAí backend v1.0 listening on http://localhost:3001");
+app.get("/api/tts", (req, res) => {
+  const text = req.query.text || "Olá!";
+  res.setHeader("Content-Type", "audio/mpeg");
+  res.send(Buffer.from("FAKEAUDIO")); // Ersätt med riktig TTS
+});
+
+app.post("/api/analyze", upload.single("audio"), (req, res) => {
+  const { profile, exerciseId, exerciseSetId } = req.body;
+  const fakeTranscript = "Olá, como estás?";
+  const fakeFeedback = "Almost correct! Watch your stress on 'estás'.";
+  res.json({
+    transcript: fakeTranscript,
+    feedback: fakeFeedback,
+    exerciseId,
+    exerciseSetId,
+    profile,
+  });
+});
+
+app.listen(PORT, () => {
+  console.log(`DizAí backend listening on port ${PORT}`);
 });
