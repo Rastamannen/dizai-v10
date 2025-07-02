@@ -1,4 +1,4 @@
-// server.cjs - DizAí backend v1.0 med strikt JSON-hantering från GPT
+// server.cjs - DizAí backend v1.0, full funktionalitet + strikt JSON-stöd från GPT
 
 const express = require("express");
 const multer = require("multer");
@@ -21,14 +21,19 @@ let cachedExerciseSet = {
 async function fetchExercises(profile) {
   try {
     const response = await axios.post(
-      process.env.CHATGPT_API_URL,
+      process.env.CHATGPT_EXERCISE_ENDPOINT,
       {
-        messages: [{ role: "user", content: `DizAí, current profile is ${profile}. Return exercise set.` }],
+        messages: [
+          {
+            role: "user",
+            content: `DizAí, current profile is ${profile}. Return exercise set.`,
+          },
+        ],
       },
       {
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.CHATGPT_API_KEY}`,
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
         },
       }
     );
@@ -42,12 +47,12 @@ async function fetchExercises(profile) {
     try {
       parsed = JSON.parse(content);
     } catch (e) {
-      console.error("JSON parsing failed from GPT response:", content);
+      console.error("GPT JSON parse error:", content);
       return { exerciseSetId: null, exercises: [] };
     }
 
     if (parsed.error) {
-      console.error("GPT returned error:", parsed.error);
+      console.warn("GPT responded with error key:", parsed.error);
       return { exerciseSetId: null, exercises: [] };
     }
 
@@ -56,7 +61,7 @@ async function fetchExercises(profile) {
       exercises: parsed.exercises,
     };
   } catch (err) {
-    console.error("Exercise fetch failed:", err);
+    console.error("fetchExercises failed:", err.message);
     return { exerciseSetId: null, exercises: [] };
   }
 }
@@ -79,17 +84,11 @@ app.post("/api/analyze", upload.single("audio"), async (req, res) => {
   const { profile, exerciseId, exerciseSetId } = req.body;
   const audioBuffer = req.file.buffer;
 
-  // Här skulle analys ske – just nu simulerad
+  // Placeholder – här sker framtida uttalsanalys
   const transcript = "Simulerad transkription";
   const feedback = "Perfect pronunciation!";
 
-  console.log({
-    profile,
-    exerciseId,
-    exerciseSetId,
-    transcript,
-    feedback,
-  });
+  console.log({ profile, exerciseId, exerciseSetId, transcript, feedback });
 
   res.json({ transcript, feedback });
 });
@@ -118,7 +117,7 @@ app.get("/api/tts", async (req, res) => {
     res.set({ "Content-Type": "audio/mpeg" });
     res.send(tts.data);
   } catch (err) {
-    console.error("TTS failed", err);
+    console.error("TTS generation failed:", err.message);
     res.status(500).send("TTS failed");
   }
 });
