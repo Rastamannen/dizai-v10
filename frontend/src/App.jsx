@@ -1,5 +1,3 @@
-// frontend/src/App.jsx
-
 import React, { useState, useRef, useEffect } from "react";
 import axios from "axios";
 import "./index.css";
@@ -7,8 +5,8 @@ import logoUrl from "./assets/DizAi_FullLogo.svg";
 
 const API_URL =
   window.location.hostname.includes("onrender.com")
-    ? "https://dizai-v09.onrender.com/api"
-    : "http://localhost:3001/api";
+    ? "https://dizai-v09.onrender.com"
+    : "http://localhost:3001";
 
 const FEEDBACK_COLORS = {
   perfect: "#197d1d",
@@ -24,8 +22,7 @@ function getFeedbackColor(feedback) {
 }
 
 export default function App() {
-  const [userId, setUserId] = useState("johan");
-  const [exerciseSetId, setExerciseSetId] = useState("set-001");
+  const [profile, setProfile] = useState("Johan");
   const [exerciseIdx, setExerciseIdx] = useState(0);
   const [exercises, setExercises] = useState([]);
   const [feedback, setFeedback] = useState("");
@@ -35,33 +32,23 @@ export default function App() {
   const [mediaStream, setMediaStream] = useState(null);
   const mediaRecorderRef = useRef();
 
-  const currentExercise = exercises[exerciseIdx];
+  const exerciseSetId = "chatgpt-set"; // Placeholder, should come from GPT API
 
-  // Fetch exercise set
   useEffect(() => {
     axios
-      .get(`${API_URL}/exercise_set`, {
-        params: {
-          userId,
-          exerciseSetId
-        }
-      })
+      .get(`${API_URL}/api/exercise_set?profile=${profile}`)
       .then((res) => setExercises(res.data.exercises || []))
       .catch(() => setExercises([]));
-  }, [userId, exerciseSetId]);
+  }, [profile]);
 
-  // Update TTS
   useEffect(() => {
     setTranscript("");
     setFeedback("");
     if (exercises.length) {
-      setAudioUrl(
-        `${API_URL.replace("/api", "")}/tts?text=${encodeURIComponent(currentExercise.text)}&type=pt-PT`
-      );
+      setAudioUrl(`${API_URL}/api/tts?text=${encodeURIComponent(exercises[exerciseIdx].text)}&lang=pt-PT`);
     }
   }, [exercises, exerciseIdx]);
 
-  // Stop mic after recording
   useEffect(() => {
     if (!recording && mediaStream) {
       mediaStream.getTracks().forEach((track) => track.stop());
@@ -82,13 +69,13 @@ export default function App() {
       const blob = new Blob(chunks, { type: "audio/webm" });
       const formData = new FormData();
       formData.append("audio", blob, "audio.webm");
-      formData.append("userId", userId);
-      formData.append("exerciseId", currentExercise.exerciseId);
+      formData.append("profile", profile);
+      formData.append("exerciseId", exercises[exerciseIdx].exerciseId);
       formData.append("exerciseSetId", exerciseSetId);
       try {
-        const resp = await axios.post(`${API_URL}/feedback`, formData);
-        setTranscript(resp.data.transcript || "");
-        setFeedback(resp.data.feedback || "");
+        const resp = await axios.post(`${API_URL}/api/analyze`, formData);
+        setTranscript(resp.data.transcript);
+        setFeedback(resp.data.feedback);
         setRecording(false);
       } catch (err) {
         setFeedback("Error during analysis.");
@@ -105,24 +92,32 @@ export default function App() {
     }
   };
 
-  const renderTranscript = () => {
+  if (!exercises.length)
+    return <div className="loading">Loading...</div>;
+
+  const ex = exercises[exerciseIdx];
+
+  function renderTranscript() {
+    if (!ex.transcript || !ex.highlight || !Array.isArray(ex.highlight))
+      return transcript;
     const words = transcript.split(/\s+/);
-    const highlights = currentExercise.highlight || [];
     return words.map((word, idx) =>
-      highlights.includes(idx) ? (
+      ex.highlight.includes(idx) ? (
         <span
           key={idx}
-          style={{ background: "#FFD580", color: "#D1495B", fontWeight: 700 }}
+          style={{
+            background: "#FFD580",
+            color: "#D1495B",
+            fontWeight: 700,
+          }}
         >
-          {word + " "}
+          {word}{" "}
         </span>
       ) : (
         word + " "
       )
     );
-  };
-
-  if (!exercises.length) return <div className="loading">Loading...</div>;
+  }
 
   return (
     <div className="dizai-app">
@@ -134,18 +129,32 @@ export default function App() {
       </header>
 
       <main style={{ padding: 20 }}>
-        <button onClick={() => setUserId(userId === "johan" ? "petra" : "johan")}>
-          Switch to {userId === "johan" ? "Petra" : "Johan"}
+        <button
+          className="profile-btn"
+          onClick={() => setProfile(profile === "Johan" ? "Petra" : "Johan")}
+        >
+          Switch to {profile === "Johan" ? "Petra" : "Johan"}
         </button>
-        <h2 className="exercise-text">{currentExercise.text}</h2>
-        <div className="ipa">IPA: <span style={{ color: "#0033A0", fontWeight: 600 }}>{currentExercise.ipa}</span></div>
-        <audio controls src={audioUrl} style={{ width: "100%", margin: "18px 0" }} />
+        <h2 className="exercise-text">{ex.text}</h2>
+        <div className="ipa">
+          IPA: <span style={{ color: "#0033A0", fontWeight: 600 }}>{ex.ipa}</span>
+        </div>
+        <audio controls src={audioUrl} style={{ width: "100%", background: "#F6F9FF", margin: "18px 0 16px 0" }}></audio>
         <div style={{ display: "flex", gap: 16, marginBottom: 8 }}>
-          <button onClick={handleRecord} disabled={recording} style={{ background: recording ? "#D49F1B" : "#0033A0", color: "#fff", fontWeight: 700 }}>
+          <button
+            className="record-btn"
+            onClick={handleRecord}
+            disabled={recording}
+            style={{
+              background: recording ? "#D49F1B" : "#0033A0",
+              color: "#fff",
+              fontWeight: 700,
+            }}
+          >
             {recording ? "Recording..." : "🎙️ Record"}
           </button>
           {recording && (
-            <button onClick={handleStop} style={{ background: "#D1495B", color: "#fff" }}>
+            <button className="stop-btn" onClick={handleStop} style={{ background: "#D1495B", color: "#fff" }}>
               Stop
             </button>
           )}
@@ -167,6 +176,7 @@ export default function App() {
         </div>
         <div style={{ display: "flex", gap: 16 }}>
           <button
+            className="nav-btn"
             disabled={exerciseIdx === 0}
             onClick={() => setExerciseIdx(exerciseIdx - 1)}
             style={{ background: "#8E9775", color: "#fff", fontWeight: 700 }}
@@ -174,6 +184,7 @@ export default function App() {
             Prev
           </button>
           <button
+            className="nav-btn"
             disabled={exerciseIdx === exercises.length - 1}
             onClick={() => setExerciseIdx(exerciseIdx + 1)}
             style={{ background: "#0033A0", color: "#fff", fontWeight: 700 }}
