@@ -1,4 +1,4 @@
-// App.jsx - DizAí v1.0 (uppdaterad för att stödja dynamisk övningsuppdatering via ChatGPT)
+// App.jsx - DizAí v1.0 (med knapp för manuell omladdning av övningar)
 
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
@@ -35,12 +35,10 @@ export default function App() {
   const [mediaStream, setMediaStream] = useState(null);
   const mediaRecorderRef = useRef();
 
-  // Ladda övningar initialt och vid profilbyte
   useEffect(() => {
     loadExerciseSet();
   }, [profile]);
 
-  // Ladda ny övning vid index-förändring
   useEffect(() => {
     if (!exercises.length) return;
     setTranscript("");
@@ -52,7 +50,6 @@ export default function App() {
     );
   }, [exerciseIdx, exercises]);
 
-  // Stoppa inspelning vid state-change
   useEffect(() => {
     if (!recording && mediaStream) {
       mediaStream.getTracks().forEach((track) => track.stop());
@@ -112,8 +109,6 @@ export default function App() {
   function handleNext() {
     if (exerciseIdx < exercises.length - 1) {
       setExerciseIdx((prev) => prev + 1);
-    } else {
-      loadExerciseSet();
     }
   }
 
@@ -121,6 +116,10 @@ export default function App() {
     if (exerciseIdx > 0) {
       setExerciseIdx((prev) => prev - 1);
     }
+  }
+
+  function handleReload() {
+    window.location.reload();
   }
 
   function renderTranscript() {
@@ -191,6 +190,12 @@ export default function App() {
           </button>
           <button className="nav-btn" onClick={handleNext} style={{ background: "#0033A0", color: "#fff", fontWeight: 700 }}>
             Next
+          </button>
+        </div>
+
+        <div style={{ marginTop: 40, textAlign: "center" }}>
+          <button onClick={handleReload} style={{ padding: "8px 16px", fontSize: "16px" }}>
+            🔄 Load new questions
           </button>
         </div>
       </main>
