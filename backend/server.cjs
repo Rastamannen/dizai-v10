@@ -21,7 +21,7 @@ let cachedExerciseSet = {
 async function fetchExercises(profile) {
   try {
     const response = await axios.post(
-      process.env.CHATGPT_API_URL,
+      process.env.CHATGPT_EXERCISE_ENDPOINT, // ✅ Korrekt variabel
       {
         model: "gpt-4o",
         messages: [
@@ -34,7 +34,7 @@ async function fetchExercises(profile) {
       },
       {
         headers: {
-          Authorization: `Bearer ${process.env.CHATGPT_API_KEY}`,
+          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
           "Content-Type": "application/json",
         },
       }
