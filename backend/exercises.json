@@ -1,0 +1,26 @@
+{
+  "Johan": [
+    { "text": "Eu sou estudante.",         "ipa": "ew so(w) ɨʃtuˈdɐ̃tɨ" },
+    { "text": "Ela está cansada.",         "ipa": "ˈɛlɐ (i)ʃˈta kɐ̃ˈsadɐ" },
+    { "text": "Nós temos uma casa.",       "ipa": "nɔʃ ˈtemuʃ ˈumɐ ˈkazɐ" },
+    { "text": "Ele é professor.",          "ipa": "ˈɛlɨ ɛ pɾufɛˈsoɾ" },
+    { "text": "Vocês são altos.",          "ipa": "voˈseʃ sɐ̃w ˈaɫtuʃ" },
+    { "text": "Eu tenho dois irmãos.",     "ipa": "ew ˈtẽju dojʃ iɾˈmɐ̃wʃ" },
+    { "text": "Tu és de Lisboa.",          "ipa": "tu ɛʃ dɨ liʒˈboɐ" },
+    { "text": "Estamos em casa.",          "ipa": "(i)ʃˈtamuz ẽj̃ ˈkazɐ" },
+    { "text": "Ele está feliz.",           "ipa": "ˈɛlɨ (i)ʃˈta fɨˈliʃ" },
+    { "text": "Ela tem um livro.",         "ipa": "ˈɛlɐ ˈtẽj ũ ˈlivɾu" }
+  ],
+  "Petra": [
+    { "text": "Como te chamas?",           "ipa": "ˈkomu tɨ ˈʃamɐʃ" },
+    { "text": "Eu sou médica.",            "ipa": "ew so(w) ˈmɛdikɐ" },
+    { "text": "Estamos em Lisboa.",        "ipa": "(i)ʃˈtamuz ẽj̃ liʒˈboɐ" },
+    { "text": "Tenho uma irmã.",           "ipa": "ˈtẽju ˈumɐ iɾˈmɐ̃" },
+    { "text": "Ela está muito feliz.",     "ipa": "ˈɛlɐ (i)ʃˈta ˈmũjtu fɨˈliʃ" },
+    { "text": "Ele tem um carro.",         "ipa": "ˈɛlɨ ˈtẽj ũ ˈkaʁu" },
+    { "text": "Nós somos amigos.",         "ipa": "nɔʃ ˈsomuʃ ɐˈmiɣuʃ" },
+    { "text": "Vocês estão prontos?",      "ipa": "voˈseʃ (i)ʃˈtɐ̃w̃ ˈpɾõtuʃ" },
+    { "text": "Tu és estudante.",          "ipa": "tu ɛʃ ɨʃtuˈdɐ̃tɨ" },
+    { "text": "Estou cansada hoje.",       "ipa": "(i)ʃˈtow̃ kɐ̃ˈsadɐ ˈoʒɨ" }
+  ]
+}
