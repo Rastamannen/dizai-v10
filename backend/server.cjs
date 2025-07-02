@@ -1,4 +1,4 @@
-// server.cjs - DizAí backend v1.0 med extra loggning för felsökning
+// server.cjs – DizAí backend v1.0 med GPT-styrd temahantering (ingen tematolkning från klient)
 
 const express = require("express");
 const multer = require("multer");
@@ -13,7 +13,7 @@ const PORT = process.env.PORT || 10000;
 
 app.use(cors());
 app.use(express.json());
-app.use(morgan("combined")); // Loggar alla inkommande requests
+app.use(morgan("combined"));
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -88,7 +88,6 @@ app.get("/api/exercise_set", async (req, res) => {
   const profile = req.query.profile || "default";
   console.log("📥 Incoming /exercise_set request. Profile:", profile);
 
-  // Endast ny hämtning om ny profil eller tom cache
   if (profile !== lastProfile || !cachedExerciseSet.exerciseSetId) {
     const { exerciseSetId, exercises } = await fetchExercises(profile);
     if (exerciseSetId) {
