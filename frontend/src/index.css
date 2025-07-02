@@ -1,23 +1,41 @@
-/* frontend/src/index.css */
-
 body {
   margin: 0;
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-  background: #f9f9f9;
+  font-family: "Nunito Sans", sans-serif;
+  background: #f6f9ff;
   color: #222;
 }
 
-button {
-  margin-top: 1em;
-  padding: 0.5em 1.2em;
-  font-weight: bold;
+.dizai-app {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 1rem;
+}
+
+.profile-btn, .record-btn, .stop-btn, .nav-btn {
+  padding: 10px 16px;
+  font-size: 1rem;
   border: none;
-  background-color: #0057ff;
-  color: white;
-  border-radius: 4px;
+  border-radius: 8px;
   cursor: pointer;
 }
 
-button:hover {
-  background-color: #003fcc;
+.exercise-text {
+  font-size: 1.8rem;
+  font-weight: bold;
+  margin: 20px 0 10px;
+}
+
+.ipa {
+  font-size: 1.1rem;
+  margin-bottom: 10px;
+}
+
+.transcript, .feedback {
+  margin-top: 12px;
+}
+
+.loading {
+  font-size: 1.5rem;
+  padding: 2rem;
+  text-align: center;
 }
