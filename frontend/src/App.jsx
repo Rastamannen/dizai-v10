@@ -1,13 +1,14 @@
-import React, { useState, useRef, useEffect } from "react";
+// App.jsx - DizAí v1.0 (uppdaterad för att stödja dynamisk övningsuppdatering via ChatGPT)
+
+import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import "./index.css";
 import logoUrl from "./assets/DizAi_FullLogo.svg";
 
-// Använd rätt Render-backend-URL beroende på frontend-domän
 const API_URL =
-  window.location.hostname.includes("dizai-front")
+  window.location.hostname.includes("onrender.com")
     ? "https://dizai-v09.onrender.com"
-    : "http://localhost:3001";
+    : "http://localhost:10000";
 
 const FEEDBACK_COLORS = {
   perfect: "#197d1d",
@@ -26,35 +27,32 @@ export default function App() {
   const [profile, setProfile] = useState("Johan");
   const [exerciseIdx, setExerciseIdx] = useState(0);
   const [exercises, setExercises] = useState([]);
+  const [exerciseSetId, setExerciseSetId] = useState(null);
   const [feedback, setFeedback] = useState("");
   const [transcript, setTranscript] = useState("");
   const [recording, setRecording] = useState(false);
   const [audioUrl, setAudioUrl] = useState(null);
   const [mediaStream, setMediaStream] = useState(null);
   const mediaRecorderRef = useRef();
-  const [exerciseSetId, setExerciseSetId] = useState(null);
 
+  // Ladda övningar initialt och vid profilbyte
   useEffect(() => {
-    axios
-      .get(`${API_URL}/api/exercise_set?profile=${profile}`)
-      .then((res) => {
-        setExercises(res.data.exercises || []);
-        setExerciseSetId(res.data.exerciseSetId || "unknown-set");
-      })
-      .catch((err) => {
-        console.error("Error fetching exercises:", err);
-        setExercises([]);
-      });
+    loadExerciseSet();
   }, [profile]);
 
+  // Ladda ny övning vid index-förändring
   useEffect(() => {
+    if (!exercises.length) return;
     setTranscript("");
     setFeedback("");
-    if (exercises.length) {
-      setAudioUrl(`${API_URL}/api/tts?text=${encodeURIComponent(exercises[exerciseIdx].text)}&lang=pt-PT`);
-    }
-  }, [exercises, exerciseIdx]);
+    setAudioUrl(
+      `${API_URL}/api/tts?text=${encodeURIComponent(
+        exercises[exerciseIdx].text
+      )}&lang=pt-PT`
+    );
+  }, [exerciseIdx, exercises]);
 
+  // Stoppa inspelning vid state-change
   useEffect(() => {
     if (!recording && mediaStream) {
       mediaStream.getTracks().forEach((track) => track.stop());
@@ -62,14 +60,28 @@ export default function App() {
     }
   }, [recording, mediaStream]);
 
-  const handleRecord = async () => {
+  async function loadExerciseSet() {
+    try {
+      const res = await axios.get(`${API_URL}/api/exercise_set?profile=${profile}`);
+      if (res.data.exerciseSetId !== exerciseSetId) {
+        setExerciseSetId(res.data.exerciseSetId);
+        setExercises(res.data.exercises);
+        setExerciseIdx(0);
+      }
+    } catch (err) {
+      setExercises([]);
+    }
+  }
+
+  async function handleRecord() {
     setRecording(true);
     setTranscript("");
     setFeedback("");
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     setMediaStream(stream);
-    mediaRecorderRef.current = new window.MediaRecorder(stream);
-    let chunks = [];
+    mediaRecorderRef.current = new MediaRecorder(stream);
+    const chunks = [];
+
     mediaRecorderRef.current.ondataavailable = (e) => chunks.push(e.data);
     mediaRecorderRef.current.onstop = async () => {
       const blob = new Blob(chunks, { type: "audio/webm" });
@@ -82,49 +94,51 @@ export default function App() {
         const resp = await axios.post(`${API_URL}/api/analyze`, formData);
         setTranscript(resp.data.transcript);
         setFeedback(resp.data.feedback);
-        setRecording(false);
       } catch (err) {
-        console.error("Analysis failed:", err);
         setFeedback("Error during analysis.");
-        setRecording(false);
       }
+      setRecording(false);
     };
-    mediaRecorderRef.current.start();
-  };
 
-  const handleStop = () => {
+    mediaRecorderRef.current.start();
+  }
+
+  function handleStop() {
     if (mediaRecorderRef.current && recording) {
       mediaRecorderRef.current.stop();
-      setRecording(false);
     }
-  };
+  }
 
-  if (!exercises.length)
-    return <div className="loading">Loading...</div>;
+  function handleNext() {
+    if (exerciseIdx < exercises.length - 1) {
+      setExerciseIdx((prev) => prev + 1);
+    } else {
+      loadExerciseSet();
+    }
+  }
 
-  const ex = exercises[exerciseIdx];
+  function handlePrev() {
+    if (exerciseIdx > 0) {
+      setExerciseIdx((prev) => prev - 1);
+    }
+  }
 
   function renderTranscript() {
-    if (!ex.transcript || !ex.highlight || !Array.isArray(ex.highlight))
-      return transcript;
+    const ex = exercises[exerciseIdx];
+    if (!ex.transcript || !ex.highlight || !Array.isArray(ex.highlight)) return transcript;
     const words = transcript.split(/\s+/);
     return words.map((word, idx) =>
       ex.highlight.includes(idx) ? (
-        <span
-          key={idx}
-          style={{
-            background: "#FFD580",
-            color: "#D1495B",
-            fontWeight: 700,
-          }}
-        >
-          {word}{" "}
-        </span>
+        <span key={idx} style={{ background: "#FFD580", color: "#D1495B", fontWeight: 700 }}>{word} </span>
       ) : (
         word + " "
       )
     );
   }
+
+  if (!exercises.length) return <div className="loading">Loading...</div>;
+
+  const ex = exercises[exerciseIdx];
 
   return (
     <div className="dizai-app">
@@ -136,10 +150,7 @@ export default function App() {
       </header>
 
       <main style={{ padding: 20 }}>
-        <button
-          className="profile-btn"
-          onClick={() => setProfile(profile === "Johan" ? "Petra" : "Johan")}
-        >
+        <button className="profile-btn" onClick={() => setProfile(profile === "Johan" ? "Petra" : "Johan")}>
           Switch to {profile === "Johan" ? "Petra" : "Johan"}
         </button>
         <h2 className="exercise-text">{ex.text}</h2>
@@ -147,18 +158,15 @@ export default function App() {
           IPA: <span style={{ color: "#0033A0", fontWeight: 600 }}>{ex.ipa}</span>
         </div>
         <audio controls src={audioUrl} style={{ width: "100%", background: "#F6F9FF", margin: "18px 0 16px 0" }}></audio>
+
         <div style={{ display: "flex", gap: 16, marginBottom: 8 }}>
           <button
             className="record-btn"
             onClick={handleRecord}
             disabled={recording}
-            style={{
-              background: recording ? "#D49F1B" : "#0033A0",
-              color: "#fff",
-              fontWeight: 700,
-            }}
+            style={{ background: recording ? "#D49F1B" : "#0033A0", color: "#fff", fontWeight: 700 }}
           >
-            {recording ? "Recording..." : "🎙️ Record"}
+            {recording ? "Recording..." : "🎤 Record"}
           </button>
           {recording && (
             <button className="stop-btn" onClick={handleStop} style={{ background: "#D1495B", color: "#fff" }}>
@@ -166,36 +174,22 @@ export default function App() {
             </button>
           )}
         </div>
+
         <div className="transcript">
-          <span style={{ fontWeight: 700, color: "#0033A0" }}>Transcript:</span>{" "}
-          {transcript ? renderTranscript() : ""}
+          <span style={{ fontWeight: 700, color: "#0033A0" }}>Transcript:</span> {transcript ? renderTranscript() : ""}
         </div>
         <div
           className="feedback"
-          style={{
-            fontWeight: 700,
-            fontSize: "1.2rem",
-            color: getFeedbackColor(feedback),
-            margin: "10px 0",
-          }}
+          style={{ fontWeight: 700, fontSize: "1.2rem", color: getFeedbackColor(feedback), margin: "10px 0" }}
         >
           {feedback}
         </div>
+
         <div style={{ display: "flex", gap: 16 }}>
-          <button
-            className="nav-btn"
-            disabled={exerciseIdx === 0}
-            onClick={() => setExerciseIdx(exerciseIdx - 1)}
-            style={{ background: "#8E9775", color: "#fff", fontWeight: 700 }}
-          >
+          <button className="nav-btn" disabled={exerciseIdx === 0} onClick={handlePrev} style={{ background: "#8E9775", color: "#fff", fontWeight: 700 }}>
             Prev
           </button>
-          <button
-            className="nav-btn"
-            disabled={exerciseIdx === exercises.length - 1}
-            onClick={() => setExerciseIdx(exerciseIdx + 1)}
-            style={{ background: "#0033A0", color: "#fff", fontWeight: 700 }}
-          >
+          <button className="nav-btn" onClick={handleNext} style={{ background: "#0033A0", color: "#fff", fontWeight: 700 }}>
             Next
           </button>
         </div>
