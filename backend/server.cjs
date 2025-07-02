@@ -1,4 +1,4 @@
-// server.cjs - DizAí backend v1.0 med GPT-4o & strikt JSON-hantering
+// server.cjs - DizAí backend v1.0 med strikt JSON-hantering och alla funktioner
 
 const express = require("express");
 const multer = require("multer");
@@ -21,7 +21,7 @@ let cachedExerciseSet = {
 async function fetchExercises(profile) {
   try {
     const response = await axios.post(
-      "https://api.openai.com/v1/chat/completions",
+      process.env.CHATGPT_API_URL,
       {
         model: "gpt-4o",
         messages: [
@@ -30,12 +30,12 @@ async function fetchExercises(profile) {
             content: `DizAí, current profile is ${profile}. Return exercise set.`,
           },
         ],
-        temperature: 0.7,
+        temperature: 0.2,
       },
       {
         headers: {
+          Authorization: `Bearer ${process.env.CHATGPT_API_KEY}`,
           "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
         },
       }
     );
@@ -46,13 +46,13 @@ async function fetchExercises(profile) {
     let parsed;
     try {
       parsed = JSON.parse(content);
-    } catch (e) {
+    } catch (err) {
       console.error("❌ JSON parse error from GPT:", content);
       return { exerciseSetId: null, exercises: [] };
     }
 
     if (parsed.error) {
-      console.error("GPT returned error:", parsed.error);
+      console.error("❌ GPT returned error:", parsed.error);
       return { exerciseSetId: null, exercises: [] };
     }
 
@@ -61,7 +61,7 @@ async function fetchExercises(profile) {
       exercises: parsed.exercises,
     };
   } catch (err) {
-    console.error("⚠️ fetchExercises failed:", err.message);
+    console.error("Exercise fetch failed:", err);
     return { exerciseSetId: null, exercises: [] };
   }
 }
@@ -84,6 +84,7 @@ app.post("/api/analyze", upload.single("audio"), async (req, res) => {
   const { profile, exerciseId, exerciseSetId } = req.body;
   const audioBuffer = req.file.buffer;
 
+  // Simulerad uttalsanalys
   const transcript = "Simulerad transkription";
   const feedback = "Perfect pronunciation!";
 
@@ -122,11 +123,11 @@ app.get("/api/tts", async (req, res) => {
     res.set({ "Content-Type": "audio/mpeg" });
     res.send(tts.data);
   } catch (err) {
-    console.error("❌ TTS failed", err.message);
+    console.error("TTS failed", err);
     res.status(500).send("TTS failed");
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`✅ DizAí backend listening on port ${PORT}`);
+  console.log(`DizAí backend listening on port ${PORT}`);
 });
