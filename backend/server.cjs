@@ -1,4 +1,4 @@
-// server.cjs - DizAí backend v1.0 med OpenAI Assistant integration, strikt JSON-hantering, fallback och loggning
+// server.cjs - DizAí backend v1.0 med OpenAI Assistant integration, strikt JSON-hantering, fallback och cache-reset
 
 const express = require("express");
 const multer = require("multer");
@@ -25,22 +25,22 @@ let cachedExerciseSet = {
   exercises: [],
 };
 
+let lastProfile = null;
+
 async function fetchExercises(profile) {
   try {
     if (!ASSISTANT_ID) throw new Error("Missing ASSISTANT_ID");
+
     if (!cachedThreadId) {
       const thread = await openai.beta.threads.create();
       cachedThreadId = thread.id;
-      console.log("🧵 Created new thread:", cachedThreadId);
     }
 
-    console.log("📨 Sending profile to assistant:", profile);
     const msg = await openai.beta.threads.messages.create(cachedThreadId, {
       role: "user",
       content: `DizAí, current profile is ${profile}. Return exercise set.`,
     });
 
-    console.log("🏃 Starting assistant run...");
     const run = await openai.beta.threads.runs.create(cachedThreadId, {
       assistant_id: ASSISTANT_ID,
     });
@@ -49,17 +49,13 @@ async function fetchExercises(profile) {
     do {
       await new Promise((resolve) => setTimeout(resolve, 500));
       runStatus = await openai.beta.threads.runs.retrieve(cachedThreadId, run.id);
-      console.log("⏳ Run status:", runStatus.status);
     } while (runStatus.status !== "completed");
 
-    console.log("✅ Run completed. Fetching messages...");
     const messages = await openai.beta.threads.messages.list(cachedThreadId);
     const last = messages.data.find((m) => m.role === "assistant");
 
-    const content = last?.content?.[0]?.text?.value?.trim();
+    const content = last.content?.[0]?.text?.value?.trim();
     if (!content) throw new Error("No content in assistant response");
-
-    console.log("🧠 Raw assistant content:", content);
 
     let parsed;
     try {
@@ -69,24 +65,26 @@ async function fetchExercises(profile) {
       return { exerciseSetId: null, exercises: [] };
     }
 
-    console.log("✅ Parsed assistant response:", parsed);
-
     return {
       exerciseSetId: parsed.exerciseSetId,
       exercises: parsed.exercises,
     };
   } catch (err) {
-    console.error("❌ Assistant fetch failed:", err.message);
+    console.error("Assistant fetch failed:", err.message);
     return { exerciseSetId: null, exercises: [] };
   }
 }
 
 app.get("/api/exercise_set", async (req, res) => {
   const profile = req.query.profile || "default";
-  const { exerciseSetId, exercises } = await fetchExercises(profile);
 
-  if (exerciseSetId && exerciseSetId !== cachedExerciseSet.exerciseSetId) {
-    cachedExerciseSet = { exerciseSetId, exercises };
+  // Hämta nytt övningsset endast om profilen har ändrats eller inga övningar är cachade
+  if (profile !== lastProfile || !cachedExerciseSet.exerciseSetId) {
+    const { exerciseSetId, exercises } = await fetchExercises(profile);
+    if (exerciseSetId) {
+      cachedExerciseSet = { exerciseSetId, exercises };
+      lastProfile = profile;
+    }
   }
 
   res.json({
