@@ -1,4 +1,4 @@
-// App.jsx – DizAí v1.0 (exerciseId + längre temainput fixad)
+// App.jsx – DizAí v1.0 (exerciseId fix + debug-info i UI)
 
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
@@ -94,13 +94,15 @@ export default function App() {
       formData.append("audio", blob, "audio.webm");
       formData.append("profile", profile);
       const ex = exercises[exerciseIdx];
-      formData.append("exerciseId", ex.exerciseId || `missing-${exerciseIdx}`);
+      const currentExerciseId = ex.exerciseId || `missing-${exerciseIdx}`;
+      formData.append("exerciseId", currentExerciseId);
       formData.append("exerciseSetId", exerciseSetId);
       try {
         const resp = await axios.post(`${API_URL}/api/analyze`, formData);
         setTranscript(resp.data.transcript);
         setFeedback(resp.data.feedback);
       } catch (err) {
+        console.error("❌ Analyze error", err);
         setFeedback("Error during analysis.");
       }
       setRecording(false);
@@ -190,6 +192,12 @@ export default function App() {
         <h2 className="exercise-text">{exText}</h2>
         <div className="ipa">
           IPA: <span style={{ color: "#0033A0", fontWeight: 600 }}>{exIPA}</span>
+        </div>
+        <div style={{ fontSize: "0.9rem", color: "#666", marginTop: 4 }}>
+          <span style={{ fontWeight: 600 }}>exerciseId:</span>{" "}
+          <code style={{ background: "#f0f0f0", padding: "2px 6px", borderRadius: 4 }}>
+            {ex.exerciseId || `missing-${exerciseIdx}`}
+          </code>
         </div>
 
         {audioUrl && (
