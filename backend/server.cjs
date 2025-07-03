@@ -44,6 +44,7 @@ async function fetchExercises(profile) {
     const msg = await openai.beta.threads.messages.create(cachedThreadId, {
       role: "user",
       content: `You are DizAí's assistant. The active profile is ${profile}. Return a full exercise set in strict JSON format as previously agreed.`,
+      response_format: "json_object"
     });
 
     const run = await openai.beta.threads.runs.create(cachedThreadId, {
