@@ -200,8 +200,9 @@ app.get("/api/tts", async (req, res) => {
       "https://api.openai.com/v1/audio/speech",
       {
         model: "tts-1",
-        voice: "shimmer",
+        voice: "onyx",         // Manlig röst
         input: text,
+        speed: 0.6             // 60 % av normal hastighet
       },
       {
         headers: {
