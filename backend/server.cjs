@@ -1,4 +1,4 @@
-// server.cjs – DizAí backend v1.2 (Detailed feedback logging)
+// server.cjs – DizAí backend v1.3 (Global thread logging fixed)
 
 const express = require("express");
 const multer = require("multer");
@@ -23,12 +23,24 @@ const ASSISTANT_ID = process.env.ASSISTANT_ID;
 const exerciseCache = {}; // key: profile::theme => { exerciseSetId, exercises }
 const threadCache = {};   // key: profile::theme => thread.id
 const lockMap = {};       // key: profile::theme => lock flag
+let globalLogThreadId = null;
 
 function getFeedbackStatus(feedback) {
   const f = feedback.toLowerCase();
   if (f.includes("perfect")) return "perfect";
   if (f.includes("almost")) return "almost";
   return "tryagain";
+}
+
+async function createGlobalLogThread() {
+  if (globalLogThreadId) return;
+  try {
+    const thread = await openai.beta.threads.create();
+    globalLogThreadId = thread.id;
+    console.log("🧾 Global log thread created:", globalLogThreadId);
+  } catch (err) {
+    console.warn("⚠️ Failed to create global log thread:", err.message);
+  }
 }
 
 async function fetchExercises(profile, theme) {
@@ -160,10 +172,12 @@ Time: ${new Date().toISOString()}`;
         content: message,
       });
 
-      await openai.beta.threads.messages.create("proj-global-log", {
-        role: "user",
-        content: `LOG ENTRY: ${profile} did exercise ${exerciseId} (${exercise.phrase || ""})\nTranscript: ${transcript}\nFeedback: ${feedback}`,
-      });
+      if (globalLogThreadId) {
+        await openai.beta.threads.messages.create(globalLogThreadId, {
+          role: "user",
+          content: `LOG ENTRY: ${profile} did exercise ${exerciseId} (${exercise.phrase || ""})\nTranscript: ${transcript}\nFeedback: ${feedback}`,
+        });
+      }
     }
   } catch (err) {
     console.warn("⚠️ Could not send feedback to assistant:", err.message);
@@ -200,6 +214,8 @@ app.get("/api/tts", async (req, res) => {
     res.status(500).send("TTS failed");
   }
 });
+
+createGlobalLogThread();
 
 app.listen(PORT, () => {
   console.log(`✅ DizAí backend listening on port ${PORT}`);
