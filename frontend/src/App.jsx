@@ -1,9 +1,10 @@
-// App.jsx – DizAí v1.3 (real ref audio in analyze request)
+// App.jsx – DizAí v1.3 (real ref audio in analyze request + integrated PronunciationFeedback)
 
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import "./index.css";
 import logoUrl from "./assets/DizAi_FullLogo.svg";
+import PronunciationFeedback from "./components/PronunciationFeedback";
 
 const API_URL =
   window.location.hostname.includes("onrender.com")
@@ -41,6 +42,7 @@ export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem("dizai-theme") || "everyday");
   const [feedback, setFeedback] = useState("");
   const [transcript, setTranscript] = useState("");
+  const [deviations, setDeviations] = useState([]);
   const [recording, setRecording] = useState(false);
   const [audioUrl, setAudioUrl] = useState(null);
   const [refAudioBlob, setRefAudioBlob] = useState(null);
@@ -59,11 +61,11 @@ export default function App() {
     console.log("Loaded exercise:", current);
     setTranscript("");
     setFeedback("");
+    setDeviations([]);
     const text = getExerciseText(current);
     const url = text !== "[Missing text]" ? `${API_URL}/api/tts?text=${encodeURIComponent(text)}&lang=pt-PT` : null;
     setAudioUrl(url);
 
-    // Fetch and store TTS audio as blob
     if (url) {
       fetch(url)
         .then(res => res.blob())
@@ -98,6 +100,7 @@ export default function App() {
     setRecording(true);
     setTranscript("");
     setFeedback("");
+    setDeviations([]);
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     setMediaStream(stream);
     mediaRecorderRef.current = new MediaRecorder(stream);
@@ -128,6 +131,7 @@ export default function App() {
         const resp = await axios.post(`${API_URL}/api/analyze`, formData);
         setTranscript(resp.data.transcript);
         setFeedback(resp.data.feedback);
+        setDeviations(resp.data.deviations || []);
       } catch (err) {
         console.error("❌ Analyze error", err);
         setFeedback("Error during analysis.");
@@ -211,8 +215,9 @@ export default function App() {
           {recording && <button onClick={handleStop}>Stop</button>}
         </div>
 
-        <div><strong>Transcript:</strong> {transcript}</div>
-        <div style={{ color: getFeedbackColor(feedback) }}>{feedback}</div>
+        {transcript && (
+          <PronunciationFeedback native={exText} attempt={transcript} deviations={deviations} />
+        )}
 
         <button onClick={handlePrev} disabled={exerciseIdx === 0}>Prev</button>
         <button onClick={handleNext}>Next</button>
