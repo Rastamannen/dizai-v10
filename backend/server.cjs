@@ -1,4 +1,4 @@
-// server.cjs – DizAí backend v1.4 (Real transcript + complete feedback logging)
+// server.cjs – DizAí backend v1.5 (Tokenized IPA + Better voice)
 
 const express = require("express");
 const multer = require("multer");
@@ -144,9 +144,19 @@ app.post("/api/analyze", upload.single("audio"), async (req, res) => {
     (ex) => ex.exerciseId === exerciseId
   ) || {};
 
-  // Realistic simulation of transcript & feedback (placeholder)
+  // Tokenized IPA
+  const tokenizedIPA = [];
+  if (exercise.phrase && exercise.ipa) {
+    const words = exercise.phrase.split(" ");
+    const ipaParts = exercise.ipa.split(" ");
+    for (let i = 0; i < Math.min(words.length, ipaParts.length); i++) {
+      tokenizedIPA.push([words[i], ipaParts[i]]);
+    }
+  }
+
+  // Simulerad feedback
   const transcript = exercise.phrase?.replace(/[aeiou]/g, "a") || "Simulated transcript";
-  const feedback = `You pronounced it almost correctly, but missed nasalization in '${exercise.phrase?.split(" ")[2]}'`;
+  const feedback = `You pronounced it almost correctly, but missed nasalization in '${tokenizedIPA[2]?.[0] || "a word"}'`;
 
   const status = getFeedbackStatus(feedback);
   const timestamp = new Date().toISOString();
@@ -158,6 +168,7 @@ app.post("/api/analyze", upload.single("audio"), async (req, res) => {
     phrase: exercise.phrase || "",
     ipa: exercise.ipa || "",
     phonetic: exercise.phonetic || "",
+    tokenizedIPA,
     transcript,
     feedback,
     status,
@@ -168,8 +179,7 @@ app.post("/api/analyze", upload.single("audio"), async (req, res) => {
 
   try {
     if (threadId && ASSISTANT_ID) {
-      const content = `Feedback for ${profile} on exerciseId ${exerciseId} in set ${exerciseSetId}:
-${JSON.stringify(feedbackObject, null, 2)}`;
+      const content = `Feedback for ${profile} on exerciseId ${exerciseId} in set ${exerciseSetId}:\n${JSON.stringify(feedbackObject, null, 2)}`;
 
       await openai.beta.threads.messages.create(threadId, {
         role: "user",
@@ -179,8 +189,7 @@ ${JSON.stringify(feedbackObject, null, 2)}`;
       if (globalLogThreadId) {
         await openai.beta.threads.messages.create(globalLogThreadId, {
           role: "user",
-          content: `LOG ENTRY:
-${JSON.stringify(feedbackObject, null, 2)}`,
+          content: `LOG ENTRY:\n${JSON.stringify(feedbackObject, null, 2)}`,
         });
       }
     }
@@ -200,9 +209,9 @@ app.get("/api/tts", async (req, res) => {
       "https://api.openai.com/v1/audio/speech",
       {
         model: "tts-1",
-        voice: "onyx",         // Manlig röst
+        voice: "echo",     // Bättre manlig röst
         input: text,
-        speed: 0.6             // 60 % av normal hastighet
+        speed: 0.6         // 60 % hastighet
       },
       {
         headers: {
