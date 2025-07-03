@@ -173,9 +173,7 @@ export default function App() {
       </header>
 
       <main>
-        <button onClick={() => setProfile(profile === "Johan" ? "Petra" : "Johan")}>
-          Switch to {profile === "Johan" ? "Petra" : "Johan"}
-        </button>
+        <button onClick={() => setProfile(profile === "Johan" ? "Petra" : "Johan")}>Switch to {profile === "Johan" ? "Petra" : "Johan"}</button>
 
         <h2>{exText}</h2>
         <div>
@@ -196,10 +194,10 @@ export default function App() {
           {recording && <button onClick={handleStop}>Stop</button>}
         </div>
 
-        {feedback && feedback.attempt && (
+        {feedback && (
           <PronunciationFeedback
             native={feedback.original || ""}
-            attempt={feedback.attempt}
+            attempt={feedback.attempt || transcript || ""}
             deviations={feedback.deviations || []}
           />
         )}
