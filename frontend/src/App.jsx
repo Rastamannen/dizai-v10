@@ -1,4 +1,4 @@
-// App.jsx – DizAí v1.0 (exerciseId fix + debug-info i UI)
+// App.jsx – DizAí v1.1 (IPA + respelling toggle, full feedback, exerciseId fix)
 
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
@@ -31,6 +31,10 @@ function getExerciseIPA(ex) {
   return ex.ipa || ex.IPA || ex.phonetic_transcription || "";
 }
 
+function getRespelling(ex) {
+  return ex.respelling || "";
+}
+
 export default function App() {
   const [profile, setProfile] = useState("Johan");
   const [exerciseIdx, setExerciseIdx] = useState(0);
@@ -42,6 +46,8 @@ export default function App() {
   const [recording, setRecording] = useState(false);
   const [audioUrl, setAudioUrl] = useState(null);
   const [mediaStream, setMediaStream] = useState(null);
+  const [showIPA, setShowIPA] = useState(true);
+  const [showRespelling, setShowRespelling] = useState(false);
   const mediaRecorderRef = useRef();
 
   useEffect(() => {
@@ -65,10 +71,7 @@ export default function App() {
 
   async function loadExerciseSet(selectedTheme) {
     try {
-      const res = await axios.post(`${API_URL}/api/exercise_set`, {
-        profile,
-        theme: selectedTheme,
-      });
+      const res = await axios.post(`${API_URL}/api/exercise_set`, { profile, theme: selectedTheme });
       setExerciseSetId(res.data.exerciseSetId || null);
       setExercises(res.data.exercises || []);
       setExerciseIdx(0);
@@ -97,6 +100,10 @@ export default function App() {
       const currentExerciseId = ex.exerciseId || `missing-${exerciseIdx}`;
       formData.append("exerciseId", currentExerciseId);
       formData.append("exerciseSetId", exerciseSetId);
+      formData.append("phrase", getExerciseText(ex));
+      formData.append("ipa", getExerciseIPA(ex));
+      formData.append("respelling", getRespelling(ex));
+
       try {
         const resp = await axios.post(`${API_URL}/api/analyze`, formData);
         setTranscript(resp.data.transcript);
@@ -145,95 +152,13 @@ export default function App() {
     }
   }
 
-  function renderTranscript() {
-    const ex = exercises[exerciseIdx];
-    if (!ex.transcript || !ex.highlight || !Array.isArray(ex.highlight)) return transcript;
-    const words = transcript.split(/\s+/);
-    return words.map((word, idx) =>
-      ex.highlight.includes(idx) ? (
-        <span key={idx} style={{ background: "#FFD580", color: "#D1495B", fontWeight: 700 }}>{word} </span>
-      ) : (
-        word + " "
-      )
-    );
-  }
-
-  if (!exercises.length) return <div className="loading">Loading...</div>;
-
   const ex = exercises[exerciseIdx];
   const exText = getExerciseText(ex);
   const exIPA = getExerciseIPA(ex);
+  const exRespelling = getRespelling(ex);
 
   return (
     <div className="dizai-app">
-      <header style={{ display: "flex", alignItems: "center", gap: 16, padding: "18px 0 0 16px", flexDirection: "column" }}>
-        <div style={{ display: "flex", alignItems: "center" }}>
-          <img src={logoUrl} alt="DizAi logo" style={{ height: 48, marginRight: 18 }} />
-          <span style={{ fontSize: "2.2rem", color: "#0033A0", fontWeight: 800 }}>DizAí v1.0</span>
-        </div>
-        <div style={{ fontSize: "1rem", color: "#444", marginTop: 4 }}>
-          🎯 Active theme:
-          <input
-            type="text"
-            value={theme}
-            onChange={handleThemeChange}
-            onKeyDown={handleKeyDown}
-            style={{ marginLeft: 8, padding: 6, fontSize: "1rem", width: 240 }}
-            placeholder="Type a theme like zoo or greetings"
-          />
-        </div>
-      </header>
-
-      <main style={{ padding: 20 }}>
-        <button className="profile-btn" onClick={() => setProfile(profile === "Johan" ? "Petra" : "Johan")}>
-          Switch to {profile === "Johan" ? "Petra" : "Johan"}
-        </button>
-
-        <h2 className="exercise-text">{exText}</h2>
-        <div className="ipa">
-          IPA: <span style={{ color: "#0033A0", fontWeight: 600 }}>{exIPA}</span>
-        </div>
-        <div style={{ fontSize: "0.9rem", color: "#666", marginTop: 4 }}>
-          <span style={{ fontWeight: 600 }}>exerciseId:</span>{" "}
-          <code style={{ background: "#f0f0f0", padding: "2px 6px", borderRadius: 4 }}>
-            {ex.exerciseId || `missing-${exerciseIdx}`}
-          </code>
-        </div>
-
-        {audioUrl && (
-          <audio controls src={audioUrl} style={{ width: "100%", background: "#F6F9FF", margin: "18px 0 16px 0" }} />
-        )}
-
-        <div style={{ display: "flex", gap: 16, marginBottom: 8 }}>
-          <button
-            className="record-btn"
-            onClick={handleRecord}
-            disabled={recording}
-            style={{ background: recording ? "#D49F1B" : "#0033A0", color: "#fff", fontWeight: 700 }}>
-            {recording ? "Recording..." : "🎤 Record"}
-          </button>
-          {recording && (
-            <button className="stop-btn" onClick={handleStop} style={{ background: "#D1495B", color: "#fff" }}>
-              Stop
-            </button>
-          )}
-        </div>
-
-        <div className="transcript">
-          <span style={{ fontWeight: 700, color: "#0033A0" }}>Transcript:</span>{" "}
-          {transcript ? renderTranscript() : ""}
-        </div>
-        <div className="feedback" style={{ fontWeight: 700, fontSize: "1.2rem", color: getFeedbackColor(feedback), margin: "10px 0" }}>{feedback}</div>
-
-        <div style={{ display: "flex", gap: 16 }}>
-          <button className="nav-btn" disabled={exerciseIdx === 0} onClick={handlePrev} style={{ background: "#8E9775", color: "#fff", fontWeight: 700 }}>Prev</button>
-          <button className="nav-btn" onClick={handleNext} style={{ background: "#0033A0", color: "#fff", fontWeight: 700 }}>Next</button>
-        </div>
-
-        <div style={{ marginTop: 40, textAlign: "center" }}>
-          <button onClick={handleReload} style={{ padding: "8px 16px", fontSize: "16px" }}>🔄 Load new questions</button>
-        </div>
-      </main>
-    </div>
-  );
-}
+      <header>
+        <img src={logoUrl} alt="DizAi logo" style={{ height: 48 }} />
+        <span style={{ fontSize: "2.2rem", fontWeight:
