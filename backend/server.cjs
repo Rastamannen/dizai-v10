@@ -1,4 +1,4 @@
-// server.cjs – DizAí backend v1.0 (GET + POST + ny tråd per tema, strikt JSON)
+// server.cjs – DizAí backend v1.0 (GET + POST + ny tråd per tema, strikt JSON + feedback till assistant)
 
 const express = require("express");
 const multer = require("multer");
@@ -21,7 +21,8 @@ const openai = new OpenAI({
 
 const ASSISTANT_ID = process.env.ASSISTANT_ID;
 const exerciseCache = {}; // key: profile::theme => { exerciseSetId, exercises }
-const lockMap = {}; // key: profile::theme => lock flag
+const threadCache = {};   // key: profile::theme => thread.id
+const lockMap = {};       // key: profile::theme => lock flag
 
 async function fetchExercises(profile, theme) {
   const cacheKey = `${profile}::${theme}`;
@@ -37,8 +38,9 @@ async function fetchExercises(profile, theme) {
 
     // 🧵 Ny tråd för varje nytt tema – undvik kontextspill!
     const thread = await openai.beta.threads.create();
+    threadCache[cacheKey] = thread.id;
 
-    const prompt = `Johan and Petra are learning European Portuguese together using DizAí. Johan is training on the theme "${theme}". Return a new exercise set in strict JSON format with a unique "exerciseSetId" starting with "${theme}-". Use European Portuguese only. Include IPA. Avoid generic topics unless theme explicitly requires it.`;
+    const prompt = `Johan and Petra are learning European Portuguese together using DizAí. Johan is training on the theme "${theme}". Return a new exercise set in strict JSON format with a unique \"exerciseSetId\" starting with \"${theme}-\". Use European Portuguese only. Include IPA. Avoid generic topics unless theme explicitly requires it. Each exercise must have a unique \"exerciseId\".`;
 
     await openai.beta.threads.messages.create(thread.id, {
       role: "user",
@@ -70,6 +72,15 @@ async function fetchExercises(profile, theme) {
       if (!parsed.exerciseSetId || !parsed.exercises) {
         throw new Error("Parsed JSON missing required fields");
       }
+
+      parsed.exercises = parsed.exercises.map((ex, i) => {
+        let safeId = ex.exerciseId?.toString().trim();
+        if (!safeId) {
+          safeId = `${parsed.exerciseSetId}--${i}`;
+        }
+        return { ...ex, exerciseId: safeId };
+      });
+
       console.log("✅ Parsed exercise set:", parsed.exerciseSetId);
     } catch (err) {
       console.error("❌ JSON parse error from assistant:", content);
@@ -89,7 +100,6 @@ async function fetchExercises(profile, theme) {
   }
 }
 
-// ✅ GET route (backward compatible)
 app.get("/api/exercise_set", async (req, res) => {
   const profile = req.query.profile || "default";
   const theme = req.query.theme || "everyday";
@@ -99,7 +109,6 @@ app.get("/api/exercise_set", async (req, res) => {
   res.json({ exerciseSetId, exercises });
 });
 
-// ✅ POST route (frontend-triggered temabyte)
 app.post("/api/exercise_set", async (req, res) => {
   const { profile = "default", theme = "everyday" } = req.body;
   console.log("📥 Incoming POST /exercise_set:", profile, theme);
@@ -120,6 +129,18 @@ app.post("/api/analyze", upload.single("audio"), async (req, res) => {
     transcript,
     feedback,
   });
+
+  try {
+    const threadId = threadCache[`${profile}::${exerciseSetId.split("-")[0]}`];
+    if (threadId && ASSISTANT_ID) {
+      await openai.beta.threads.messages.create(threadId, {
+        role: "user",
+        content: `Feedback for ${profile} on exerciseId ${exerciseId} in set ${exerciseSetId}: \nPhrase: [original phrase] \nTranscript: ${transcript} \nFeedback: ${feedback}`,
+      });
+    }
+  } catch (err) {
+    console.warn("⚠️ Could not send feedback to assistant:", err.message);
+  }
 
   res.json({ transcript, feedback });
 });
