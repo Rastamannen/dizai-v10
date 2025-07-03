@@ -1,15 +1,14 @@
-// App.jsx – DizAí v1.3 (real ref audio in analyze request + integrated PronunciationFeedback)
+// App.jsx – DizAí v1.3 (correct alias, ref audio, PronunciationFeedback integrated)
 
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import "./index.css";
 import logoUrl from "./assets/DizAi_FullLogo.svg";
-import PronunciationFeedback from "./components/PronunciationFeedback";
+import PronunciationFeedback from "@/components/PronunciationFeedback";
 
-const API_URL =
-  window.location.hostname.includes("onrender.com")
-    ? "https://dizai-v09.onrender.com"
-    : "http://localhost:10000";
+const API_URL = window.location.hostname.includes("onrender.com")
+  ? "https://dizai-v09.onrender.com"
+  : "http://localhost:10000";
 
 function getExerciseText(ex) {
   return ex?.text || ex?.phrase || ex?.sentence || "[Missing text]";
@@ -113,7 +112,7 @@ export default function App() {
       try {
         const resp = await axios.post(`${API_URL}/api/analyze`, formData);
         setTranscript(resp.data.transcript);
-        setFeedback(resp.data.feedback); // feedback is now object
+        setFeedback(resp.data.feedback); // object with original, attempt, deviations
       } catch (err) {
         console.error("❌ Analyze error", err);
         setFeedback({ error: "Error during analysis." });
@@ -197,7 +196,7 @@ export default function App() {
           {recording && <button onClick={handleStop}>Stop</button>}
         </div>
 
-        {feedback && typeof feedback === "object" && feedback.original && (
+        {feedback && feedback.original && (
           <PronunciationFeedback
             native={feedback.original}
             attempt={feedback.attempt}
