@@ -39,3 +39,29 @@ body {
   padding: 2rem;
   text-align: center;
 }
+
+.toggle-container {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 10px;
+  align-items: center;
+}
+
+.toggle-container label {
+  font-weight: 600;
+}
+
+.transcription-display {
+  font-size: 1rem;
+  background: #eef3ff;
+  padding: 10px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+
+/* Favicon support */
+link[rel="icon"] {
+  width: 32px;
+  height: 32px;
+}
