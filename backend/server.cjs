@@ -36,11 +36,10 @@ async function fetchExercises(profile, theme) {
   try {
     if (!ASSISTANT_ID) throw new Error("Missing ASSISTANT_ID");
 
-    // 🧵 Ny tråd för varje nytt tema – undvik kontextspill!
     const thread = await openai.beta.threads.create();
     threadCache[cacheKey] = thread.id;
 
-    const prompt = `Johan and Petra are learning European Portuguese together using DizAí. Johan is training on the theme "${theme}". Return a new exercise set in strict JSON format with a unique \"exerciseSetId\" starting with \"${theme}-\". Use European Portuguese only. Include IPA. Avoid generic topics unless theme explicitly requires it. Each exercise must have a unique \"exerciseId\".`;
+    const prompt = `Johan and Petra are learning European Portuguese together using DizAí. Johan is training on the theme "${theme}". Return a new exercise set in strict JSON format with a unique "exerciseSetId" starting with "${theme}-". Use European Portuguese only. Include IPA. Avoid generic topics unless theme explicitly requires it. Each exercise must have a unique "exerciseId".`;
 
     await openai.beta.threads.messages.create(thread.id, {
       role: "user",
@@ -131,7 +130,8 @@ app.post("/api/analyze", upload.single("audio"), async (req, res) => {
   });
 
   try {
-    const threadId = threadCache[`${profile}::${exerciseSetId.split("-")[0]}`];
+    const theme = exerciseSetId?.split("-")[0];
+    const threadId = threadCache[`${profile}::${theme}`];
     if (threadId && ASSISTANT_ID) {
       await openai.beta.threads.messages.create(threadId, {
         role: "user",
