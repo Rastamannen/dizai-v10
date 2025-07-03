@@ -1,4 +1,4 @@
-// server.cjs – DizAí backend v1.0 (Feedback logging to project context)
+// server.cjs – DizAí backend v1.1 (Correct feedback thread routing)
 
 const express = require("express");
 const multer = require("multer");
@@ -131,20 +131,19 @@ app.post("/api/analyze", upload.single("audio"), async (req, res) => {
 
   try {
     const theme = exerciseSetId?.split("-")[0];
-    const threadId = threadCache[`${profile}::${theme}`];
+    const threadKey = `${profile}::${theme}`;
+    const threadId = threadCache[threadKey];
+
     if (threadId && ASSISTANT_ID) {
-      const phrase = (exerciseCache[`${profile}::${theme}`]?.exercises || []).find(
-        (ex) => ex.exerciseId === exerciseId
-      )?.phrase || "";
+      const phrase =
+        exerciseCache[threadKey]?.exercises?.find((ex) => ex.exerciseId === exerciseId)
+          ?.phrase || "";
+
+      const message = `Feedback for ${profile} on exerciseId ${exerciseId} in set ${exerciseSetId}:\nPhrase: ${phrase}\nTranscript: ${transcript}\nFeedback: ${feedback}`;
 
       await openai.beta.threads.messages.create(threadId, {
         role: "user",
-        content: `Feedback for ${profile} on exerciseId ${exerciseId} in set ${exerciseSetId}:\nPhrase: ${phrase}\nTranscript: ${transcript}\nFeedback: ${feedback}`,
-      });
-
-      await openai.beta.threads.messages.create("proj-global-log", {
-        role: "user",
-        content: `LOG ENTRY: ${profile} did exercise ${exerciseId} (${phrase})\nTranscript: ${transcript}\nFeedback: ${feedback}`,
+        content: message,
       });
     }
   } catch (err) {
