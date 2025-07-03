@@ -1,4 +1,4 @@
-// server.cjs – DizAí backend v1.0 med GPT-styrd temahantering (ingen tematolkning från klient)
+// server.cjs – DizAí backend v1.0 med GPT-styrd temahantering (med körlås per GPT-thread)
 
 const express = require("express");
 const multer = require("multer");
@@ -21,6 +21,7 @@ const openai = new OpenAI({
 
 const ASSISTANT_ID = process.env.ASSISTANT_ID;
 let cachedThreadId = null;
+let isRunInProgress = false;
 
 let cachedExerciseSet = {
   exerciseSetId: null,
@@ -30,6 +31,13 @@ let cachedExerciseSet = {
 let lastProfile = null;
 
 async function fetchExercises(profile) {
+  if (isRunInProgress) {
+    console.warn("⚠️ Run already in progress, skipping fetch.");
+    return cachedExerciseSet;
+  }
+
+  isRunInProgress = true;
+
   try {
     if (!ASSISTANT_ID) throw new Error("Missing ASSISTANT_ID");
 
@@ -81,6 +89,8 @@ async function fetchExercises(profile) {
   } catch (err) {
     console.error("🚫 Assistant fetch failed:", err.message);
     return { exerciseSetId: null, exercises: [] };
+  } finally {
+    isRunInProgress = false;
   }
 }
 
