@@ -1,4 +1,4 @@
-// App.jsx – DizAí v1.1 (IPA + respelling toggle, full feedback, exerciseId fix)
+// App.jsx – DizAí v1.2 (resilient fallback, safer UI, logging)
 
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
@@ -24,15 +24,15 @@ function getFeedbackColor(feedback) {
 }
 
 function getExerciseText(ex) {
-  return ex.text || ex.phrase || ex.sentence || "";
+  return ex?.text || ex?.phrase || ex?.sentence || "[Missing text]";
 }
 
 function getExerciseIPA(ex) {
-  return ex.ipa || ex.IPA || ex.phonetic_transcription || "";
+  return ex?.ipa || ex?.IPA || ex?.phonetic_transcription || "";
 }
 
 function getRespelling(ex) {
-  return ex.respelling || "";
+  return ex?.respelling || "";
 }
 
 export default function App() {
@@ -56,10 +56,12 @@ export default function App() {
 
   useEffect(() => {
     if (!exercises.length) return;
+    const current = exercises[exerciseIdx];
+    console.log("Loaded exercise:", current);
     setTranscript("");
     setFeedback("");
-    const text = getExerciseText(exercises[exerciseIdx]);
-    setAudioUrl(text ? `${API_URL}/api/tts?text=${encodeURIComponent(text)}&lang=pt-PT` : null);
+    const text = getExerciseText(current);
+    setAudioUrl(text !== "[Missing text]" ? `${API_URL}/api/tts?text=${encodeURIComponent(text)}&lang=pt-PT` : null);
   }, [exerciseIdx, exercises]);
 
   useEffect(() => {
@@ -72,8 +74,9 @@ export default function App() {
   async function loadExerciseSet(selectedTheme) {
     try {
       const res = await axios.post(`${API_URL}/api/exercise_set`, { profile, theme: selectedTheme });
+      const filtered = (res.data.exercises || []).filter(e => getExerciseText(e) !== "[Missing text]");
       setExerciseSetId(res.data.exerciseSetId || null);
-      setExercises(res.data.exercises || []);
+      setExercises(filtered);
       setExerciseIdx(0);
     } catch (err) {
       console.error("❌ Failed to load exercises", err);
@@ -152,6 +155,8 @@ export default function App() {
     }
   }
 
+  if (!exercises.length) return <div className="loading">Loading...</div>;
+
   const ex = exercises[exerciseIdx];
   const exText = getExerciseText(ex);
   const exIPA = getExerciseIPA(ex);
@@ -161,7 +166,7 @@ export default function App() {
     <div className="dizai-app">
       <header>
         <img src={logoUrl} alt="DizAi logo" style={{ height: 48 }} />
-        <span style={{ fontSize: "2.2rem", fontWeight: 800 }}>DizAí v1.1</span>
+        <span style={{ fontSize: "2.2rem", fontWeight: 800 }}>DizAí v1.2</span>
         <input value={theme} onChange={handleThemeChange} onKeyDown={handleKeyDown} placeholder="Theme" />
       </header>
 
@@ -189,9 +194,7 @@ export default function App() {
           {recording && <button onClick={handleStop}>Stop</button>}
         </div>
 
-        <div>
-          <strong>Transcript:</strong> {transcript}
-        </div>
+        <div><strong>Transcript:</strong> {transcript}</div>
         <div style={{ color: getFeedbackColor(feedback) }}>{feedback}</div>
 
         <button onClick={handlePrev} disabled={exerciseIdx === 0}>Prev</button>
