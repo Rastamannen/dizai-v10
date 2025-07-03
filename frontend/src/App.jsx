@@ -1,4 +1,4 @@
-// App.jsx – DizAí v1.3.1 (always show feedback panel, even with perfect match)
+// App.jsx – DizAí v1.3.2 (improved UX, robust feedback handling, mobile-ready)
 
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
@@ -53,7 +53,10 @@ export default function App() {
       fetch(url)
         .then(res => res.blob())
         .then(blob => setRefAudioBlob(blob))
-        .catch(err => console.error("Failed to fetch TTS audio blob", err));
+        .catch(() => {
+          console.warn("⚠️ Failed to fetch TTS audio");
+          setRefAudioBlob(null);
+        });
     } else {
       setRefAudioBlob(null);
     }
@@ -80,47 +83,52 @@ export default function App() {
   }
 
   async function handleRecord() {
-    setRecording(true);
-    setTranscript("");
-    setFeedback(null);
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    setMediaStream(stream);
-    mediaRecorderRef.current = new MediaRecorder(stream);
-    const chunks = [];
+    try {
+      setRecording(true);
+      setTranscript("");
+      setFeedback(null);
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setMediaStream(stream);
+      mediaRecorderRef.current = new MediaRecorder(stream);
+      const chunks = [];
 
-    mediaRecorderRef.current.ondataavailable = (e) => chunks.push(e.data);
-    mediaRecorderRef.current.onstop = async () => {
-      const blob = new Blob(chunks, { type: "audio/webm" });
-      const formData = new FormData();
-      formData.append("audio", blob, "audio.webm");
+      mediaRecorderRef.current.ondataavailable = (e) => chunks.push(e.data);
+      mediaRecorderRef.current.onstop = async () => {
+        const blob = new Blob(chunks, { type: "audio/webm" });
+        const formData = new FormData();
+        formData.append("audio", blob, "audio.webm");
 
-      const ex = exercises[exerciseIdx];
-      const currentExerciseId = ex.exerciseId || `missing-${exerciseIdx}`;
-      formData.append("exerciseId", currentExerciseId);
-      formData.append("exerciseSetId", exerciseSetId);
-      formData.append("profile", profile);
-      formData.append("phrase", getExerciseText(ex));
-      formData.append("ipa", getExerciseIPA(ex));
-      formData.append("respelling", getRespelling(ex));
+        const ex = exercises[exerciseIdx];
+        const currentExerciseId = ex.exerciseId || `missing-${exerciseIdx}`;
+        formData.append("exerciseId", currentExerciseId);
+        formData.append("exerciseSetId", exerciseSetId);
+        formData.append("profile", profile);
+        formData.append("phrase", getExerciseText(ex));
+        formData.append("ipa", getExerciseIPA(ex));
+        formData.append("respelling", getRespelling(ex));
 
-      if (refAudioBlob) {
-        formData.append("ref", refAudioBlob, "ref.mp3");
-      } else {
-        console.warn("⚠️ No reference audio blob available");
-      }
+        if (refAudioBlob) {
+          formData.append("ref", refAudioBlob, "ref.mp3");
+        } else {
+          console.warn("⚠️ No reference audio blob available");
+        }
 
-      try {
-        const resp = await axios.post(`${API_URL}/api/analyze`, formData);
-        setTranscript(resp.data.transcript);
-        setFeedback(resp.data.feedback);
-      } catch (err) {
-        console.error("❌ Analyze error", err);
-        setFeedback({ error: "Error during analysis." });
-      }
+        try {
+          const resp = await axios.post(`${API_URL}/api/analyze`, formData);
+          setTranscript(resp.data.transcript);
+          setFeedback(resp.data.feedback);
+        } catch (err) {
+          console.error("❌ Analyze error", err);
+          setFeedback({ error: "Error during analysis." });
+        }
+        setRecording(false);
+      };
+
+      mediaRecorderRef.current.start();
+    } catch (err) {
+      alert("Could not start recording. Please check your microphone permissions.");
       setRecording(false);
-    };
-
-    mediaRecorderRef.current.start();
+    }
   }
 
   function handleStop() {
@@ -168,7 +176,7 @@ export default function App() {
     <div className="dizai-app">
       <header>
         <img src={logoUrl} alt="DizAi logo" style={{ height: 48 }} />
-        <span style={{ fontSize: "2.2rem", fontWeight: 800 }}>DizAí v1.3.1</span>
+        <span style={{ fontSize: "2.2rem", fontWeight: 800 }}>DizAí v1.3.2</span>
         <input value={theme} onChange={handleThemeChange} onKeyDown={handleKeyDown} placeholder="Theme" />
       </header>
 
@@ -190,13 +198,13 @@ export default function App() {
         {audioUrl && <audio controls src={audioUrl} />}
 
         <div>
-          <button onClick={handleRecord} disabled={recording}>{recording ? "Recording..." : "🎤 Record"}</button>
+          <button onClick={handleRecord} disabled={recording}>{recording ? "🔴 Recording..." : "🎤 Record"}</button>
           {recording && <button onClick={handleStop}>Stop</button>}
         </div>
 
         {feedback && (
           <PronunciationFeedback
-            native={feedback.original || ""}
+            native={feedback.original || feedback.native || ""}
             attempt={feedback.attempt || transcript || ""}
             deviations={feedback.deviations || []}
           />
