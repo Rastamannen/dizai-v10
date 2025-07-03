@@ -1,3 +1,5 @@
+// server.cjs – DizAí backend v1.0 (GET + POST + ny tråd per tema, strikt JSON)
+
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
@@ -87,10 +89,20 @@ async function fetchExercises(profile, theme) {
   }
 }
 
+// ✅ GET route (backward compatible)
 app.get("/api/exercise_set", async (req, res) => {
   const profile = req.query.profile || "default";
   const theme = req.query.theme || "everyday";
-  console.log("📥 Incoming /exercise_set request:", profile, theme);
+  console.log("📥 Incoming GET /exercise_set:", profile, theme);
+
+  const { exerciseSetId, exercises } = await fetchExercises(profile, theme);
+  res.json({ exerciseSetId, exercises });
+});
+
+// ✅ POST route (frontend-triggered temabyte)
+app.post("/api/exercise_set", async (req, res) => {
+  const { profile = "default", theme = "everyday" } = req.body;
+  console.log("📥 Incoming POST /exercise_set:", profile, theme);
 
   const { exerciseSetId, exercises } = await fetchExercises(profile, theme);
   res.json({ exerciseSetId, exercises });
