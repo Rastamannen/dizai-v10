@@ -1,4 +1,4 @@
-// App.jsx – DizAí v1.0 (exerciseId robust, tema-input fixad)
+// App.jsx – DizAí v1.0 (exerciseId + längre temainput fixad)
 
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
@@ -53,9 +53,7 @@ export default function App() {
     setTranscript("");
     setFeedback("");
     const text = getExerciseText(exercises[exerciseIdx]);
-    setAudioUrl(
-      text ? `${API_URL}/api/tts?text=${encodeURIComponent(text)}&lang=pt-PT` : null
-    );
+    setAudioUrl(text ? `${API_URL}/api/tts?text=${encodeURIComponent(text)}&lang=pt-PT` : null);
   }, [exerciseIdx, exercises]);
 
   useEffect(() => {
@@ -95,7 +93,8 @@ export default function App() {
       const formData = new FormData();
       formData.append("audio", blob, "audio.webm");
       formData.append("profile", profile);
-      formData.append("exerciseId", exercises[exerciseIdx].exerciseId);
+      const ex = exercises[exerciseIdx];
+      formData.append("exerciseId", ex.exerciseId || `missing-${exerciseIdx}`);
       formData.append("exerciseSetId", exerciseSetId);
       try {
         const resp = await axios.post(`${API_URL}/api/analyze`, formData);
@@ -129,9 +128,8 @@ export default function App() {
   }
 
   function handleThemeChange(e) {
-    const newTheme = e.target.value;
-    setTheme(newTheme);
-    localStorage.setItem("dizai-theme", newTheme);
+    setTheme(e.target.value);
+    localStorage.setItem("dizai-theme", e.target.value);
   }
 
   function handleReload() {
@@ -174,29 +172,60 @@ export default function App() {
         <div style={{ fontSize: "1rem", color: "#444", marginTop: 4 }}>
           🎯 Active theme:
           <input
+            type="text"
             value={theme}
             onChange={handleThemeChange}
             onKeyDown={handleKeyDown}
-            style={{ marginLeft: 8, padding: 4, fontSize: "1rem", width: 280 }}
-            placeholder="Enter theme"
+            style={{ marginLeft: 8, padding: 6, fontSize: "1rem", width: 240 }}
+            placeholder="Type a theme like zoo or greetings"
           />
         </div>
       </header>
 
       <main style={{ padding: 20 }}>
-        <button className="profile-btn" onClick={() => setProfile(profile === "Johan" ? "Petra" : "Johan")}>Switch to {profile === "Johan" ? "Petra" : "Johan"}</button>
+        <button className="profile-btn" onClick={() => setProfile(profile === "Johan" ? "Petra" : "Johan")}>
+          Switch to {profile === "Johan" ? "Petra" : "Johan"}
+        </button>
 
         <h2 className="exercise-text">{exText}</h2>
         <div className="ipa">
           IPA: <span style={{ color: "#0033A0", fontWeight: 600 }}>{exIPA}</span>
         </div>
 
-        {audioUrl && <audio controls src={audioUrl} style={{ width: "100%", background: "#F6F9FF", margin: "18px 0 16px 0" }} />}
+        {audioUrl && (
+          <audio controls src={audioUrl} style={{ width: "100%", background: "#F6F9FF", margin: "18px 0 16px 0" }} />
+        )}
 
         <div style={{ display: "flex", gap: 16, marginBottom: 8 }}>
-          <button className="record-btn" onClick={handleRecord} disabled={recording} style={{ background: recording ? "#D49F1B" : "#0033A0", color: "#fff", fontWeight: 700 }}>{recording ? "Recording..." : "🎤 Record"}</button>
-          {recording && <button className="stop-btn" onClick={handleStop} style={{ background: "#D1495B", color: "#fff" }}>Stop</button>}
+          <button
+            className="record-btn"
+            onClick={handleRecord}
+            disabled={recording}
+            style={{ background: recording ? "#D49F1B" : "#0033A0", color: "#fff", fontWeight: 700 }}>
+            {recording ? "Recording..." : "🎤 Record"}
+          </button>
+          {recording && (
+            <button className="stop-btn" onClick={handleStop} style={{ background: "#D1495B", color: "#fff" }}>
+              Stop
+            </button>
+          )}
         </div>
 
         <div className="transcript">
-          <span style={{ fontWeight:
+          <span style={{ fontWeight: 700, color: "#0033A0" }}>Transcript:</span>{" "}
+          {transcript ? renderTranscript() : ""}
+        </div>
+        <div className="feedback" style={{ fontWeight: 700, fontSize: "1.2rem", color: getFeedbackColor(feedback), margin: "10px 0" }}>{feedback}</div>
+
+        <div style={{ display: "flex", gap: 16 }}>
+          <button className="nav-btn" disabled={exerciseIdx === 0} onClick={handlePrev} style={{ background: "#8E9775", color: "#fff", fontWeight: 700 }}>Prev</button>
+          <button className="nav-btn" onClick={handleNext} style={{ background: "#0033A0", color: "#fff", fontWeight: 700 }}>Next</button>
+        </div>
+
+        <div style={{ marginTop: 40, textAlign: "center" }}>
+          <button onClick={handleReload} style={{ padding: "8px 16px", fontSize: "16px" }}>🔄 Load new questions</button>
+        </div>
+      </main>
+    </div>
+  );
+}
