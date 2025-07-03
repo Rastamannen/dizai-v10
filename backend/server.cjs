@@ -110,8 +110,19 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
     const userFile = new File([userAudio], "user.webm", { type: "audio/webm" });
     const refFile = new File([refAudio], "ref.webm", { type: "audio/webm" });
 
-    const userTrans = await openai.audio.transcriptions.create({ file: userFile, model: "whisper-1", response_format: "verbose_json" });
-    const refTrans = await openai.audio.transcriptions.create({ file: refFile, model: "whisper-1", response_format: "verbose_json" });
+    const userTrans = await openai.audio.transcriptions.create({
+      file: userFile,
+      model: "whisper-1",
+      response_format: "verbose_json",
+      language: "pt"
+    });
+
+    const refTrans = await openai.audio.transcriptions.create({
+      file: refFile,
+      model: "whisper-1",
+      response_format: "verbose_json",
+      language: "pt"
+    });
 
     console.log("🧪 Transcripts sent to GPT:");
     console.log("➡️ User:", userTrans.text);
