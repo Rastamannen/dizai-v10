@@ -1,4 +1,4 @@
-// server.cjs – DizAí backend v1.0 (GET + POST + ny tråd per tema, strikt JSON + feedback till assistant)
+// server.cjs – DizAí backend v1.0 (IPA + respelling, feedback till Assistant, transkript + audio)
 
 const express = require("express");
 const multer = require("multer");
@@ -23,6 +23,18 @@ const ASSISTANT_ID = process.env.ASSISTANT_ID;
 const exerciseCache = {}; // key: profile::theme => { exerciseSetId, exercises }
 const threadCache = {};   // key: profile::theme => thread.id
 const lockMap = {};       // key: profile::theme => lock flag
+
+function generateRespelling(phrase) {
+  return phrase
+    .replace(/ã/g, "an")
+    .replace(/ç/g, "s")
+    .replace(/lh/g, "ly")
+    .replace(/nh/g, "ny")
+    .replace(/qu/g, "k")
+    .replace(/v/g, "v")
+    .replace(/j/g, "zh")
+    .replace(/x/g, "sh");
+}
 
 async function fetchExercises(profile, theme) {
   const cacheKey = `${profile}::${theme}`;
@@ -74,10 +86,12 @@ async function fetchExercises(profile, theme) {
 
       parsed.exercises = parsed.exercises.map((ex, i) => {
         let safeId = ex.exerciseId?.toString().trim();
-        if (!safeId) {
-          safeId = `${parsed.exerciseSetId}--${i}`;
-        }
-        return { ...ex, exerciseId: safeId };
+        if (!safeId) safeId = `${parsed.exerciseSetId}--${i}`;
+        return {
+          ...ex,
+          exerciseId: safeId,
+          respelling: generateRespelling(ex.phrase),
+        };
       });
 
       console.log("✅ Parsed exercise set:", parsed.exerciseSetId);
@@ -120,6 +134,12 @@ app.post("/api/analyze", upload.single("audio"), async (req, res) => {
   const { profile, exerciseId, exerciseSetId } = req.body;
   const transcript = "Simulated transcript";
   const feedback = "Perfect pronunciation!";
+  const theme = exerciseSetId?.split("-")[0];
+
+  const exercise =
+    exerciseCache[`${profile}::${theme}`]?.exercises.find(
+      (e) => e.exerciseId === exerciseId
+    ) || {};
 
   console.log("🎧 Analyze request received", {
     profile,
@@ -130,12 +150,11 @@ app.post("/api/analyze", upload.single("audio"), async (req, res) => {
   });
 
   try {
-    const theme = exerciseSetId?.split("-")[0];
     const threadId = threadCache[`${profile}::${theme}`];
     if (threadId && ASSISTANT_ID) {
       await openai.beta.threads.messages.create(threadId, {
         role: "user",
-        content: `Feedback for ${profile} on exerciseId ${exerciseId} in set ${exerciseSetId}: \nPhrase: [original phrase] \nTranscript: ${transcript} \nFeedback: ${feedback}`,
+        content: `Detailed feedback for ${profile} on exerciseId ${exerciseId} in set ${exerciseSetId}:\nOriginal: ${exercise.phrase}\nTranscript: ${transcript}\nIPA: ${exercise.ipa}\nRespelling: ${exercise.respelling}\nFeedback: ${feedback}`,
       });
     }
   } catch (err) {
