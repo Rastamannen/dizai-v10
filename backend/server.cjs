@@ -1,5 +1,3 @@
-// server.cjs – DizAí backend v1.0 med GPT-styrd temahantering (körlås + cachning per profil+tema)
-
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
@@ -20,7 +18,6 @@ const openai = new OpenAI({
 });
 
 const ASSISTANT_ID = process.env.ASSISTANT_ID;
-const threadCache = {}; // key: profile::theme => threadId
 const exerciseCache = {}; // key: profile::theme => { exerciseSetId, exercises }
 const lockMap = {}; // key: profile::theme => lock flag
 
@@ -36,31 +33,28 @@ async function fetchExercises(profile, theme) {
   try {
     if (!ASSISTANT_ID) throw new Error("Missing ASSISTANT_ID");
 
-    if (!threadCache[cacheKey]) {
-      const thread = await openai.beta.threads.create();
-      threadCache[cacheKey] = thread.id;
-      console.log("🧵 Created thread for", cacheKey);
-    }
+    // 🧵 Ny tråd för varje nytt tema – undvik kontextspill!
+    const thread = await openai.beta.threads.create();
 
-    const prompt = `Johan and Petra are learning European Portuguese together using DizAí. Johan is training on the theme "${theme}". Return a new exercise set in strict JSON format with a unique "exerciseSetId" starting with "${theme}-". Use European Portuguese only. Include IPA.`;
+    const prompt = `Johan and Petra are learning European Portuguese together using DizAí. Johan is training on the theme "${theme}". Return a new exercise set in strict JSON format with a unique "exerciseSetId" starting with "${theme}-". Use European Portuguese only. Include IPA. Avoid generic topics unless theme explicitly requires it.`;
 
-    await openai.beta.threads.messages.create(threadCache[cacheKey], {
+    await openai.beta.threads.messages.create(thread.id, {
       role: "user",
       content: prompt,
     });
 
-    const run = await openai.beta.threads.runs.create(threadCache[cacheKey], {
+    const run = await openai.beta.threads.runs.create(thread.id, {
       assistant_id: ASSISTANT_ID,
     });
 
     let runStatus;
     do {
       await new Promise((resolve) => setTimeout(resolve, 500));
-      runStatus = await openai.beta.threads.runs.retrieve(threadCache[cacheKey], run.id);
+      runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
       console.log("⏳ Run status:", runStatus.status);
     } while (runStatus.status !== "completed");
 
-    const messages = await openai.beta.threads.messages.list(threadCache[cacheKey]);
+    const messages = await openai.beta.threads.messages.list(thread.id);
     const last = messages.data.find((m) => m.role === "assistant");
     const content = last.content?.[0]?.text?.value?.trim();
 
@@ -99,13 +93,11 @@ app.get("/api/exercise_set", async (req, res) => {
   console.log("📥 Incoming /exercise_set request:", profile, theme);
 
   const { exerciseSetId, exercises } = await fetchExercises(profile, theme);
-
   res.json({ exerciseSetId, exercises });
 });
 
 app.post("/api/analyze", upload.single("audio"), async (req, res) => {
   const { profile, exerciseId, exerciseSetId } = req.body;
-  const audioBuffer = req.file?.buffer;
   const transcript = "Simulated transcript";
   const feedback = "Perfect pronunciation!";
 
