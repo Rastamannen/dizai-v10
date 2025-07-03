@@ -1,4 +1,4 @@
-// PronunciationFeedback.jsx – DizAí v1.5 UI feedback panel
+// PronunciationFeedback.jsx – DizAí v1.5.1 enhanced feedback presentation
 import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -11,24 +11,29 @@ const getColor = (severity) => {
 
 export default function PronunciationFeedback({ native, attempt, deviations }) {
   const hasDeviations = deviations && deviations.length > 0;
-
+  const attemptValid = attempt && attempt.trim().length > 0;
   const wordMap = {};
+
   deviations.forEach(({ word, severity, note }, i) => {
     const key = word.toLowerCase();
     if (!wordMap[key]) wordMap[key] = [];
     wordMap[key].push({ severity, note, index: i + 1 });
   });
 
-  const attemptWords = attempt.split(" ").map((word, idx) => {
-    const clean = word.toLowerCase().replace(/[.,!?]/g, "");
-    const match = wordMap[clean];
-    if (!match) return <span key={idx} className="mr-1">{word}</span>;
+  const attemptWords = attemptValid
+    ? attempt.split(" ").map((word, idx) => {
+        const clean = word.toLowerCase().replace(/[.,!?]/g, "");
+        const match = wordMap[clean];
+        if (!match) return <span key={idx} className="mr-1">{word}</span>;
 
-    const highest = match.sort((a, b) => (a.severity === "major" ? -1 : 1))[0];
-    return (
-      <span key={idx} className={cn(getColor(highest.severity), "mr-1 font-medium")}>{word}<sup className="ml-0.5 text-xs">{highest.index}</sup></span>
-    );
-  });
+        const highest = match.sort((a, b) => (a.severity === "major" ? -1 : 1))[0];
+        return (
+          <span key={idx} className={cn(getColor(highest.severity), "mr-1 font-medium")}>
+            {word}<sup className="ml-0.5 text-xs">{highest.index}</sup>
+          </span>
+        );
+      })
+    : [<span key="na" className="text-red-600">(No recognizable attempt)</span>];
 
   return (
     <Card className="w-full p-4 md:p-6 text-sm md:text-base">
@@ -46,7 +51,7 @@ export default function PronunciationFeedback({ native, attempt, deviations }) {
             {deviations.map((dev, idx) => (
               <div key={idx} className="text-xs">
                 <sup className="text-red-500 font-bold mr-1">{idx + 1}</sup>
-                <strong>{dev.word}:</strong> {dev.note}
+                <strong>{dev.word || "[missing word]"}:</strong> {dev.note}
               </div>
             ))}
           </div>
