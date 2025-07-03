@@ -1,4 +1,4 @@
-// server.cjs – DizAí backend v1.1 (Correct feedback thread routing)
+// server.cjs – DizAí backend v1.2 (Detailed feedback logging)
 
 const express = require("express");
 const multer = require("multer");
@@ -23,6 +23,13 @@ const ASSISTANT_ID = process.env.ASSISTANT_ID;
 const exerciseCache = {}; // key: profile::theme => { exerciseSetId, exercises }
 const threadCache = {};   // key: profile::theme => thread.id
 const lockMap = {};       // key: profile::theme => lock flag
+
+function getFeedbackStatus(feedback) {
+  const f = feedback.toLowerCase();
+  if (f.includes("perfect")) return "perfect";
+  if (f.includes("almost")) return "almost";
+  return "tryagain";
+}
 
 async function fetchExercises(profile, theme) {
   const cacheKey = `${profile}::${theme}`;
@@ -135,15 +142,27 @@ app.post("/api/analyze", upload.single("audio"), async (req, res) => {
     const threadId = threadCache[threadKey];
 
     if (threadId && ASSISTANT_ID) {
-      const phrase =
-        exerciseCache[threadKey]?.exercises?.find((ex) => ex.exerciseId === exerciseId)
-          ?.phrase || "";
+      const exercise = exerciseCache[threadKey]?.exercises?.find(
+        (ex) => ex.exerciseId === exerciseId
+      ) || {};
 
-      const message = `Feedback for ${profile} on exerciseId ${exerciseId} in set ${exerciseSetId}:\nPhrase: ${phrase}\nTranscript: ${transcript}\nFeedback: ${feedback}`;
+      const message = `Feedback for ${profile} on exerciseId ${exerciseId} in set ${exerciseSetId}:
+Phrase: ${exercise.phrase || ""}
+IPA: ${exercise.ipa || ""}
+Respelling: ${exercise.phonetic || ""}
+Transcript: ${transcript}
+Feedback: ${feedback}
+Status: ${getFeedbackStatus(feedback)}
+Time: ${new Date().toISOString()}`;
 
       await openai.beta.threads.messages.create(threadId, {
         role: "user",
         content: message,
+      });
+
+      await openai.beta.threads.messages.create("proj-global-log", {
+        role: "user",
+        content: `LOG ENTRY: ${profile} did exercise ${exerciseId} (${exercise.phrase || ""})\nTranscript: ${transcript}\nFeedback: ${feedback}`,
       });
     }
   } catch (err) {
