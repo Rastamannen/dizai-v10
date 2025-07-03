@@ -5,6 +5,9 @@ const axios = require("axios");
 const morgan = require("morgan");
 const { Readable } = require("stream");
 const { OpenAI } = require("openai");
+const textToSpeech = require("@google-cloud/text-to-speech");
+const fs = require("fs");
+const util = require("util");
 
 const app = express();
 const upload = multer();
@@ -15,6 +18,7 @@ app.use(express.json());
 app.use(morgan("combined"));
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const gcpTTSClient = new textToSpeech.TextToSpeechClient();
 
 const ASSISTANT_ID = process.env.ASSISTANT_ID;
 const exerciseCache = {};
@@ -174,23 +178,23 @@ app.get("/api/tts", async (req, res) => {
   const text = req.query.text;
   if (!text) return res.status(400).send("Text required");
 
+  const request = {
+    input: { text },
+    voice: {
+      languageCode: "pt-PT",
+      name: "pt-PT-Standard-A",
+    },
+    audioConfig: {
+      audioEncoding: "MP3",
+    },
+  };
+
   try {
-    const tts = await axios.post("https://api.openai.com/v1/audio/speech", {
-      model: "tts-1",
-      voice: "echo",
-      input: text,
-      speed: 1.0
-    }, {
-      headers: {
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      responseType: "arraybuffer"
-    });
+    const [response] = await gcpTTSClient.synthesizeSpeech(request);
     res.set({ "Content-Type": "audio/mpeg" });
-    res.send(tts.data);
+    res.send(response.audioContent);
   } catch (err) {
-    console.error("❌ TTS failed:", err);
+    console.error("❌ Google TTS failed:", err);
     res.status(500).send("TTS failed");
   }
 });
