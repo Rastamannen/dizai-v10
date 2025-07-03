@@ -11,19 +11,6 @@ const API_URL =
     ? "https://dizai-v09.onrender.com"
     : "http://localhost:10000";
 
-const FEEDBACK_COLORS = {
-  perfect: "#197d1d",
-  almost: "#D49F1B",
-  tryagain: "#D1495B",
-};
-
-function getFeedbackColor(feedback) {
-  if (!feedback) return "#222";
-  if (feedback.toLowerCase().includes("perfect")) return FEEDBACK_COLORS.perfect;
-  if (feedback.toLowerCase().includes("almost")) return FEEDBACK_COLORS.almost;
-  return FEEDBACK_COLORS.tryagain;
-}
-
 function getExerciseText(ex) {
   return ex?.text || ex?.phrase || ex?.sentence || "[Missing text]";
 }
@@ -40,9 +27,8 @@ export default function App() {
   const [exercises, setExercises] = useState([]);
   const [exerciseSetId, setExerciseSetId] = useState(null);
   const [theme, setTheme] = useState(() => localStorage.getItem("dizai-theme") || "everyday");
-  const [feedback, setFeedback] = useState("");
+  const [feedback, setFeedback] = useState(null);
   const [transcript, setTranscript] = useState("");
-  const [deviations, setDeviations] = useState([]);
   const [recording, setRecording] = useState(false);
   const [audioUrl, setAudioUrl] = useState(null);
   const [refAudioBlob, setRefAudioBlob] = useState(null);
@@ -58,10 +44,8 @@ export default function App() {
   useEffect(() => {
     if (!exercises.length) return;
     const current = exercises[exerciseIdx];
-    console.log("Loaded exercise:", current);
     setTranscript("");
-    setFeedback("");
-    setDeviations([]);
+    setFeedback(null);
     const text = getExerciseText(current);
     const url = text !== "[Missing text]" ? `${API_URL}/api/tts?text=${encodeURIComponent(text)}&lang=pt-PT` : null;
     setAudioUrl(url);
@@ -99,8 +83,7 @@ export default function App() {
   async function handleRecord() {
     setRecording(true);
     setTranscript("");
-    setFeedback("");
-    setDeviations([]);
+    setFeedback(null);
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     setMediaStream(stream);
     mediaRecorderRef.current = new MediaRecorder(stream);
@@ -130,11 +113,10 @@ export default function App() {
       try {
         const resp = await axios.post(`${API_URL}/api/analyze`, formData);
         setTranscript(resp.data.transcript);
-        setFeedback(resp.data.feedback);
-        setDeviations(resp.data.deviations || []);
+        setFeedback(resp.data.feedback); // feedback is now object
       } catch (err) {
         console.error("❌ Analyze error", err);
-        setFeedback("Error during analysis.");
+        setFeedback({ error: "Error during analysis." });
       }
       setRecording(false);
     };
@@ -215,8 +197,16 @@ export default function App() {
           {recording && <button onClick={handleStop}>Stop</button>}
         </div>
 
-        {transcript && (
-          <PronunciationFeedback native={exText} attempt={transcript} deviations={deviations} />
+        {feedback && typeof feedback === "object" && feedback.original && (
+          <PronunciationFeedback
+            native={feedback.original}
+            attempt={feedback.attempt}
+            deviations={feedback.deviations || []}
+          />
+        )}
+
+        {feedback && feedback.error && (
+          <div style={{ color: "#c00", fontWeight: 600 }}>{feedback.error}</div>
         )}
 
         <button onClick={handlePrev} disabled={exerciseIdx === 0}>Prev</button>
