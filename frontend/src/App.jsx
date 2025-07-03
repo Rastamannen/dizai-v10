@@ -66,6 +66,7 @@ export default function App() {
   }, [recording, mediaStream]);
 
   async function loadExerciseSet(selectedTheme) {
+    if (!selectedTheme.trim()) return;
     try {
       const res = await axios.post(`${API_URL}/api/exercise_set`, {
         profile,
@@ -74,6 +75,8 @@ export default function App() {
       setExerciseSetId(res.data.exerciseSetId || null);
       setExercises(res.data.exercises || []);
       setExerciseIdx(0);
+      setTranscript("");
+      setFeedback("");
     } catch (err) {
       console.error("❌ Failed to load exercises", err);
       setExercises([]);
@@ -135,6 +138,7 @@ export default function App() {
   }
 
   function handleReload() {
+    if (!theme.trim()) return;
     loadExerciseSet(theme);
   }
 
