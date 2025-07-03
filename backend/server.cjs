@@ -43,7 +43,7 @@ async function fetchExercises(profile) {
 
     const msg = await openai.beta.threads.messages.create(cachedThreadId, {
       role: "user",
-      content: `DizAí, current profile is ${profile}. Return exercise set.`,
+      content: `You are DizAí's assistant. The active profile is ${profile}. Return a full exercise set in strict JSON format as previously agreed.`,
     });
 
     const run = await openai.beta.threads.runs.create(cachedThreadId, {
@@ -107,7 +107,7 @@ app.get("/api/exercise_set", async (req, res) => {
 app.post("/api/analyze", upload.single("audio"), async (req, res) => {
   const { profile, exerciseId, exerciseSetId } = req.body;
   const audioBuffer = req.file?.buffer;
-  const transcript = "Simulerad transkription";
+  const transcript = "Simulated transcript";
   const feedback = "Perfect pronunciation!";
 
   console.log("🎧 Analyze request received", {
