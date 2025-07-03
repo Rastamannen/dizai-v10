@@ -1,4 +1,4 @@
-// App.jsx – DizAí v1.2 (resilient fallback, safer UI, logging)
+// App.jsx – DizAí v1.3 (real ref audio in analyze request)
 
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
@@ -26,11 +26,9 @@ function getFeedbackColor(feedback) {
 function getExerciseText(ex) {
   return ex?.text || ex?.phrase || ex?.sentence || "[Missing text]";
 }
-
 function getExerciseIPA(ex) {
   return ex?.ipa || ex?.IPA || ex?.phonetic_transcription || "";
 }
-
 function getRespelling(ex) {
   return ex?.respelling || "";
 }
@@ -45,6 +43,7 @@ export default function App() {
   const [transcript, setTranscript] = useState("");
   const [recording, setRecording] = useState(false);
   const [audioUrl, setAudioUrl] = useState(null);
+  const [refAudioBlob, setRefAudioBlob] = useState(null);
   const [mediaStream, setMediaStream] = useState(null);
   const [showIPA, setShowIPA] = useState(true);
   const [showRespelling, setShowRespelling] = useState(false);
@@ -61,12 +60,23 @@ export default function App() {
     setTranscript("");
     setFeedback("");
     const text = getExerciseText(current);
-    setAudioUrl(text !== "[Missing text]" ? `${API_URL}/api/tts?text=${encodeURIComponent(text)}&lang=pt-PT` : null);
+    const url = text !== "[Missing text]" ? `${API_URL}/api/tts?text=${encodeURIComponent(text)}&lang=pt-PT` : null;
+    setAudioUrl(url);
+
+    // Fetch and store TTS audio as blob
+    if (url) {
+      fetch(url)
+        .then(res => res.blob())
+        .then(blob => setRefAudioBlob(blob))
+        .catch(err => console.error("Failed to fetch TTS audio blob", err));
+    } else {
+      setRefAudioBlob(null);
+    }
   }, [exerciseIdx, exercises]);
 
   useEffect(() => {
     if (!recording && mediaStream) {
-      mediaStream.getTracks().forEach((track) => track.stop());
+      mediaStream.getTracks().forEach(track => track.stop());
       setMediaStream(null);
     }
   }, [recording, mediaStream]);
@@ -98,14 +108,21 @@ export default function App() {
       const blob = new Blob(chunks, { type: "audio/webm" });
       const formData = new FormData();
       formData.append("audio", blob, "audio.webm");
-      formData.append("profile", profile);
+
       const ex = exercises[exerciseIdx];
       const currentExerciseId = ex.exerciseId || `missing-${exerciseIdx}`;
       formData.append("exerciseId", currentExerciseId);
       formData.append("exerciseSetId", exerciseSetId);
+      formData.append("profile", profile);
       formData.append("phrase", getExerciseText(ex));
       formData.append("ipa", getExerciseIPA(ex));
       formData.append("respelling", getRespelling(ex));
+
+      if (refAudioBlob) {
+        formData.append("ref", refAudioBlob, "ref.mp3");
+      } else {
+        console.warn("⚠️ No reference audio blob available");
+      }
 
       try {
         const resp = await axios.post(`${API_URL}/api/analyze`, formData);
@@ -166,7 +183,7 @@ export default function App() {
     <div className="dizai-app">
       <header>
         <img src={logoUrl} alt="DizAi logo" style={{ height: 48 }} />
-        <span style={{ fontSize: "2.2rem", fontWeight: 800 }}>DizAí v1.2</span>
+        <span style={{ fontSize: "2.2rem", fontWeight: 800 }}>DizAí v1.3</span>
         <input value={theme} onChange={handleThemeChange} onKeyDown={handleKeyDown} placeholder="Theme" />
       </header>
 
