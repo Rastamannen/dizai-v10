@@ -1,4 +1,4 @@
-// server.cjs – DizAí backend v1.5 (Tokenized IPA + Better voice)
+// server.cjs – DizAí backend v1.6 (Real Pronunciation Analysis)
 
 const express = require("express");
 const multer = require("multer");
@@ -20,98 +20,54 @@ const openai = new OpenAI({
 });
 
 const ASSISTANT_ID = process.env.ASSISTANT_ID;
-const exerciseCache = {}; // key: profile::theme => { exerciseSetId, exercises }
-const threadCache = {};   // key: profile::theme => thread.id
-const lockMap = {};       // key: profile::theme => lock flag
+const exerciseCache = {};
+const threadCache = {};
+const lockMap = {};
 let globalLogThreadId = null;
 
-function getFeedbackStatus(feedback) {
-  const f = feedback.toLowerCase();
-  if (f.includes("perfect")) return "perfect";
-  if (f.includes("almost")) return "almost";
-  return "tryagain";
+function getFeedbackStatus(comments) {
+  return comments.length === 0 ? "perfect" : "tryagain";
 }
 
 async function createGlobalLogThread() {
   if (globalLogThreadId) return;
-  try {
-    const thread = await openai.beta.threads.create();
-    globalLogThreadId = thread.id;
-    console.log("🧾 Global log thread created:", globalLogThreadId);
-  } catch (err) {
-    console.warn("⚠️ Failed to create global log thread:", err.message);
-  }
+  const thread = await openai.beta.threads.create();
+  globalLogThreadId = thread.id;
+  console.log("🧾 Global log thread created:", globalLogThreadId);
 }
 
 async function fetchExercises(profile, theme) {
   const cacheKey = `${profile}::${theme}`;
-  if (lockMap[cacheKey]) {
-    console.warn("⚠️ Run already in progress for", cacheKey);
-    return exerciseCache[cacheKey] || { exerciseSetId: null, exercises: [] };
-  }
-
+  if (lockMap[cacheKey]) return exerciseCache[cacheKey] || { exerciseSetId: null, exercises: [] };
   lockMap[cacheKey] = true;
-
   try {
-    if (!ASSISTANT_ID) throw new Error("Missing ASSISTANT_ID");
-
     const thread = await openai.beta.threads.create();
     threadCache[cacheKey] = thread.id;
 
-    const prompt = `Johan and Petra are learning European Portuguese together using DizAí. Johan is training on the theme "${theme}". Return a new exercise set in strict JSON format with a unique "exerciseSetId" starting with "${theme}-". Use European Portuguese only. Include IPA and a user-friendly phonetic spelling. Avoid generic topics unless theme explicitly requires it. Each exercise must have a unique "exerciseId".`;
+    const prompt = `Johan and Petra are learning European Portuguese together using DizAí. Johan is training on the theme "${theme}". Return a new exercise set in strict JSON format with a unique "exerciseSetId" starting with "${theme}-". Use European Portuguese only. Include IPA and a user-friendly phonetic spelling. Avoid generic topics. Each exercise must have a unique "exerciseId".`;
 
-    await openai.beta.threads.messages.create(thread.id, {
-      role: "user",
-      content: prompt,
-    });
-
-    const run = await openai.beta.threads.runs.create(thread.id, {
-      assistant_id: ASSISTANT_ID,
-    });
-
+    await openai.beta.threads.messages.create(thread.id, { role: "user", content: prompt });
+    const run = await openai.beta.threads.runs.create(thread.id, { assistant_id: ASSISTANT_ID });
     let runStatus;
     do {
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise(res => setTimeout(res, 500));
       runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
-      console.log("⏳ Run status:", runStatus.status);
     } while (runStatus.status !== "completed");
 
     const messages = await openai.beta.threads.messages.list(thread.id);
-    const last = messages.data.find((m) => m.role === "assistant");
+    const last = messages.data.find(m => m.role === "assistant");
     const content = last.content?.[0]?.text?.value?.trim();
+    const parsed = JSON.parse(content);
 
-    console.log("🧠 Raw assistant content:", content);
+    parsed.exercises = parsed.exercises.map((ex, i) => ({
+      ...ex,
+      exerciseId: ex.exerciseId?.trim() || `${parsed.exerciseSetId}--${i}`,
+    }));
 
-    if (!content) throw new Error("No content in assistant response");
-
-    let parsed;
-    try {
-      parsed = JSON.parse(content);
-      if (!parsed.exerciseSetId || !parsed.exercises) {
-        throw new Error("Parsed JSON missing required fields");
-      }
-
-      parsed.exercises = parsed.exercises.map((ex, i) => {
-        let safeId = ex.exerciseId?.toString().trim();
-        if (!safeId) {
-          safeId = `${parsed.exerciseSetId}--${i}`;
-        }
-        return { ...ex, exerciseId: safeId };
-      });
-
-      console.log("✅ Parsed exercise set:", parsed.exerciseSetId);
-    } catch (err) {
-      console.error("❌ JSON parse error from assistant:", content);
-      return { exerciseSetId: null, exercises: [] };
-    }
-
-    exerciseCache[cacheKey] = {
-      exerciseSetId: parsed.exerciseSetId,
-      exercises: parsed.exercises,
-    };
+    exerciseCache[cacheKey] = { exerciseSetId: parsed.exerciseSetId, exercises: parsed.exercises };
     return exerciseCache[cacheKey];
   } catch (err) {
-    console.error("🚫 Assistant fetch failed:", err.message);
+    console.error("🚫 Fetch failed:", err.message);
     return { exerciseSetId: null, exercises: [] };
   } finally {
     lockMap[cacheKey] = false;
@@ -121,83 +77,84 @@ async function fetchExercises(profile, theme) {
 app.get("/api/exercise_set", async (req, res) => {
   const profile = req.query.profile || "default";
   const theme = req.query.theme || "everyday";
-  console.log("📥 Incoming GET /exercise_set:", profile, theme);
-
-  const { exerciseSetId, exercises } = await fetchExercises(profile, theme);
-  res.json({ exerciseSetId, exercises });
+  const result = await fetchExercises(profile, theme);
+  res.json(result);
 });
 
 app.post("/api/exercise_set", async (req, res) => {
   const { profile = "default", theme = "everyday" } = req.body;
-  console.log("📥 Incoming POST /exercise_set:", profile, theme);
-
-  const { exerciseSetId, exercises } = await fetchExercises(profile, theme);
-  res.json({ exerciseSetId, exercises });
+  const result = await fetchExercises(profile, theme);
+  res.json(result);
 });
 
-app.post("/api/analyze", upload.single("audio"), async (req, res) => {
+app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), async (req, res) => {
   const { profile, exerciseId, exerciseSetId } = req.body;
   const theme = exerciseSetId?.split("-")[0];
   const threadKey = `${profile}::${theme}`;
-  const threadId = threadCache[threadKey];
-  const exercise = exerciseCache[threadKey]?.exercises?.find(
-    (ex) => ex.exerciseId === exerciseId
-  ) || {};
+  const exercise = exerciseCache[threadKey]?.exercises?.find(e => e.exerciseId === exerciseId) || {};
 
-  // Tokenized IPA
-  const tokenizedIPA = [];
-  if (exercise.phrase && exercise.ipa) {
-    const words = exercise.phrase.split(" ");
-    const ipaParts = exercise.ipa.split(" ");
-    for (let i = 0; i < Math.min(words.length, ipaParts.length); i++) {
-      tokenizedIPA.push([words[i], ipaParts[i]]);
-    }
-  }
+  const userAudio = req.files?.audio?.[0]?.buffer;
+  const refAudio = req.files?.ref?.[0]?.buffer;
+  if (!userAudio || !refAudio) return res.status(400).send("Both audio files required");
 
-  // Simulerad feedback
-  const transcript = exercise.phrase?.replace(/[aeiou]/g, "a") || "Simulated transcript";
-  const feedback = `You pronounced it almost correctly, but missed nasalization in '${tokenizedIPA[2]?.[0] || "a word"}'`;
+  const userTrans = await openai.audio.transcriptions.create({ file: userAudio, model: "whisper-1", response_format: "verbose_json" });
+  const refTrans = await openai.audio.transcriptions.create({ file: refAudio, model: "whisper-1", response_format: "verbose_json" });
 
-  const status = getFeedbackStatus(feedback);
-  const timestamp = new Date().toISOString();
+  const gptPrompt = `Compare the pronunciation in these two utterances of the European Portuguese phrase "${exercise.phrase}". One is a native reference, the other is the user's attempt. Highlight any phonetic inaccuracies (e.g. final s pronounced hard, wrong vowel quality, nasal errors, etc.). Return:
+- Original phrase
+- User's transcript
+- A list of phoneme-level deviations
+- Annotated version of user's text (errors marked)
+- Overall assessment (perfect, tryagain)
+`;
+
+  const chat = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      { role: "system", content: "You are a phonetic pronunciation expert for European Portuguese." },
+      { role: "user", content: gptPrompt },
+      { role: "user", content: `User transcript:
+${userTrans.text}
+
+Reference transcript:
+${refTrans.text}` }
+    ]
+  });
+
+  const feedbackText = chat.choices[0]?.message?.content;
+  const status = feedbackText.includes("perfect") ? "perfect" : "tryagain";
 
   const feedbackObject = {
     profile,
     exerciseSetId,
     exerciseId,
-    phrase: exercise.phrase || "",
-    ipa: exercise.ipa || "",
-    phonetic: exercise.phonetic || "",
-    tokenizedIPA,
-    transcript,
-    feedback,
+    phrase: exercise.phrase,
+    ipa: exercise.ipa,
+    phonetic: exercise.phonetic,
+    userTranscript: userTrans.text,
+    refTranscript: refTrans.text,
+    feedback: feedbackText,
     status,
-    timestamp,
+    timestamp: new Date().toISOString(),
   };
 
-  console.log("🧾 Full feedback:", feedbackObject);
-
-  try {
-    if (threadId && ASSISTANT_ID) {
-      const content = `Feedback for ${profile} on exerciseId ${exerciseId} in set ${exerciseSetId}:\n${JSON.stringify(feedbackObject, null, 2)}`;
-
-      await openai.beta.threads.messages.create(threadId, {
+  const threadId = threadCache[threadKey];
+  if (threadId && ASSISTANT_ID) {
+    await openai.beta.threads.messages.create(threadId, {
+      role: "user",
+      content: `Feedback for ${profile} on exerciseId ${exerciseId}:
+${JSON.stringify(feedbackObject, null, 2)}`
+    });
+    if (globalLogThreadId) {
+      await openai.beta.threads.messages.create(globalLogThreadId, {
         role: "user",
-        content,
+        content: `LOG ENTRY:
+${JSON.stringify(feedbackObject, null, 2)}`
       });
-
-      if (globalLogThreadId) {
-        await openai.beta.threads.messages.create(globalLogThreadId, {
-          role: "user",
-          content: `LOG ENTRY:\n${JSON.stringify(feedbackObject, null, 2)}`,
-        });
-      }
     }
-  } catch (err) {
-    console.warn("⚠️ Could not send feedback to assistant:", err.message);
   }
 
-  res.json({ transcript, feedback });
+  res.json({ transcript: userTrans.text, feedback: feedbackText });
 });
 
 app.get("/api/tts", async (req, res) => {
@@ -205,23 +162,18 @@ app.get("/api/tts", async (req, res) => {
   if (!text) return res.status(400).send("Text required");
 
   try {
-    const tts = await axios.post(
-      "https://api.openai.com/v1/audio/speech",
-      {
-        model: "tts-1",
-        voice: "echo",     // Bättre manlig röst
-        input: text,
-        speed: 0.6         // 60 % hastighet
+    const tts = await axios.post("https://api.openai.com/v1/audio/speech", {
+      model: "tts-1",
+      voice: "echo",
+      input: text,
+      speed: 0.6
+    }, {
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
       },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        responseType: "arraybuffer",
-      }
-    );
-
+      responseType: "arraybuffer"
+    });
     res.set({ "Content-Type": "audio/mpeg" });
     res.send(tts.data);
   } catch (err) {
