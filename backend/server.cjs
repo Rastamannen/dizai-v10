@@ -1,4 +1,4 @@
-// server.cjs – DizAí v1.5 backend med fonetisk feedback och full logik
+// server.cjs – DizAí v1.5.2 backend med förbättrad fonetisk analys och robust fallback
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
@@ -113,7 +113,11 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
     const userTrans = await openai.audio.transcriptions.create({ file: userFile, model: "whisper-1", response_format: "verbose_json" });
     const refTrans = await openai.audio.transcriptions.create({ file: refFile, model: "whisper-1", response_format: "verbose_json" });
 
-    const gptPrompt = `Compare the pronunciation in these two utterances of the European Portuguese phrase "${exercise.phrase}". One is a native reference, the other is the user's attempt. Highlight any phonetic inaccuracies (e.g. final s pronounced hard, wrong vowel quality, nasal errors, etc.). Return:
+    console.log("🧪 Transcripts sent to GPT:");
+    console.log("➡️ User:", userTrans.text);
+    console.log("✅ Ref:", refTrans.text);
+
+    const gptPrompt = `Compare the pronunciation in these two utterances of the European Portuguese phrase "${exercise.phrase}". One is a native reference, the other is the user's attempt. Do not rely solely on the transcription text. Even if they appear identical, assume the user may still have phonetic inaccuracies. Focus on differences in pronunciation. Highlight any phonetic issues (e.g. final 's' pronounced hard, wrong vowel quality, nasal errors, dropped syllables, rhythm, intonation, etc.). Return:
 - Native phrase
 - User's attempt
 - Word-level deviations with severity (minor/major) and short note
