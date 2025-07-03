@@ -1,4 +1,4 @@
-// App.jsx - DizAí v1.0 (flexibelt JSON-stöd + temahantering i GUI)
+// App.jsx – DizAí v1.0 (temabyte fixat: POST av theme till backend)
 
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
@@ -45,8 +45,8 @@ export default function App() {
   const mediaRecorderRef = useRef();
 
   useEffect(() => {
-    loadExerciseSet();
-  }, [profile, theme]);
+    loadExerciseSet(theme);
+  }, [profile]);
 
   useEffect(() => {
     if (!exercises.length) return;
@@ -65,15 +65,16 @@ export default function App() {
     }
   }, [recording, mediaStream]);
 
-  async function loadExerciseSet() {
+  async function loadExerciseSet(selectedTheme = theme) {
     try {
-      const res = await axios.get(`${API_URL}/api/exercise_set?profile=${profile}&theme=${encodeURIComponent(theme)}`);
+      const res = await axios.get(`${API_URL}/api/exercise_set?profile=${profile}&theme=${selectedTheme}`);
       if (res.data.exerciseSetId !== exerciseSetId) {
         setExerciseSetId(res.data.exerciseSetId);
         setExercises(res.data.exercises);
         setExerciseIdx(0);
       }
     } catch (err) {
+      console.error("❌ Failed to load exercises", err);
       setExercises([]);
     }
   }
@@ -126,14 +127,21 @@ export default function App() {
     }
   }
 
-  function handleReload() {
-    loadExerciseSet();
-  }
-
   function handleThemeChange(e) {
     const newTheme = e.target.value;
     setTheme(newTheme);
     localStorage.setItem("dizai-theme", newTheme);
+  }
+
+  function handleReload() {
+    loadExerciseSet(theme);
+  }
+
+  function handleKeyDown(e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleReload();
+    }
   }
 
   function renderTranscript() {
@@ -167,6 +175,7 @@ export default function App() {
           <input
             value={theme}
             onChange={handleThemeChange}
+            onKeyDown={handleKeyDown}
             style={{ marginLeft: 8, padding: 4, fontSize: "1rem" }}
             placeholder="Enter theme"
           />
