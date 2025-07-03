@@ -15,7 +15,7 @@ export default function PronunciationFeedback({ native, attempt, deviations }) {
   const wordMap = {};
 
   deviations.forEach(({ word, severity, note }, i) => {
-    const key = word.toLowerCase();
+    const key = word?.toLowerCase?.() || `__missing${i}`;
     if (!wordMap[key]) wordMap[key] = [];
     wordMap[key].push({ severity, note, index: i + 1 });
   });
