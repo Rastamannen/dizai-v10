@@ -1,4 +1,4 @@
-// App.jsx - DizAí v1.0 (flexibelt JSON-stöd: text/phrase/IPA/ipa)
+// App.jsx - DizAí v1.0 (flexibelt JSON-stöd + temahantering i GUI)
 
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
@@ -23,7 +23,6 @@ function getFeedbackColor(feedback) {
   return FEEDBACK_COLORS.tryagain;
 }
 
-// Helpers to handle flexible field names
 function getExerciseText(ex) {
   return ex.text || ex.phrase || ex.sentence || "";
 }
@@ -37,7 +36,7 @@ export default function App() {
   const [exerciseIdx, setExerciseIdx] = useState(0);
   const [exercises, setExercises] = useState([]);
   const [exerciseSetId, setExerciseSetId] = useState(null);
-  const [theme, setTheme] = useState("");
+  const [theme, setTheme] = useState(() => localStorage.getItem("dizai-theme") || "everyday");
   const [feedback, setFeedback] = useState("");
   const [transcript, setTranscript] = useState("");
   const [recording, setRecording] = useState(false);
@@ -47,7 +46,7 @@ export default function App() {
 
   useEffect(() => {
     loadExerciseSet();
-  }, [profile]);
+  }, [profile, theme]);
 
   useEffect(() => {
     if (!exercises.length) return;
@@ -74,10 +73,8 @@ export default function App() {
         setExercises(res.data.exercises);
         setExerciseIdx(0);
       }
-      setTheme(res.data.theme || "");
     } catch (err) {
       setExercises([]);
-      setTheme("");
     }
   }
 
@@ -130,7 +127,13 @@ export default function App() {
   }
 
   function handleReload() {
-    window.location.reload();
+    loadExerciseSet();
+  }
+
+  function handleThemeChange(e) {
+    const newTheme = e.target.value;
+    setTheme(newTheme);
+    localStorage.setItem("dizai-theme", newTheme);
   }
 
   function renderTranscript() {
@@ -159,11 +162,15 @@ export default function App() {
           <img src={logoUrl} alt="DizAi logo" style={{ height: 48, marginRight: 18 }} />
           <span style={{ fontSize: "2.2rem", color: "#0033A0", fontWeight: 800 }}>DizAí v1.0</span>
         </div>
-        {theme && (
-          <div style={{ fontSize: "1rem", color: "#444", marginTop: 4 }}>
-            🎯 Active theme: <strong>{theme}</strong>
-          </div>
-        )}
+        <div style={{ fontSize: "1rem", color: "#444", marginTop: 4 }}>
+          🎯 Active theme:
+          <input
+            value={theme}
+            onChange={handleThemeChange}
+            style={{ marginLeft: 8, padding: 4, fontSize: "1rem" }}
+            placeholder="Enter theme"
+          />
+        </div>
       </header>
 
       <main style={{ padding: 20 }}>
