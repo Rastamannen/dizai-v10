@@ -1,11 +1,9 @@
-// server.cjs – DizAí v1.3 backend with JSON fix and phonetic feedback
-
+// server.cjs – DizAí v1.5 backend med fonetisk feedback och full logik
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
 const axios = require("axios");
 const morgan = require("morgan");
-const { Readable } = require("stream");
 const { OpenAI } = require("openai");
 const textToSpeech = require("@google-cloud/text-to-speech");
 const { File } = require("formdata-node");
