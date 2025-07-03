@@ -10,12 +10,15 @@ const getColor = (severity) => {
 };
 
 export default function PronunciationFeedback({ native, attempt, deviations }) {
-  const hasDeviations = deviations && deviations.length > 0;
+  const specificDeviations = deviations.filter((d) => d.word);
+  const generalDeviations = deviations.filter((d) => !d.word);
 
+  const hasDeviations = deviations && deviations.length > 0;
   const attemptWords = attempt.split(" ");
+
   const colorMap = {};
-  deviations.forEach(({ word, severity }) => {
-    colorMap[word.toLowerCase()] = severity;
+  specificDeviations.forEach(({ word, severity }) => {
+    if (word) colorMap[word.toLowerCase()] = severity;
   });
 
   return (
@@ -39,15 +42,20 @@ export default function PronunciationFeedback({ native, attempt, deviations }) {
 
         {hasDeviations ? (
           <div className="mt-2 space-y-1">
-            {deviations.map((dev, idx) => (
+            {specificDeviations.map((dev, idx) => (
               <div key={idx} className="text-xs">
                 <sup className="text-red-500 font-bold mr-1">{idx + 1}</sup>
                 <strong>{dev.word}:</strong> {dev.note}
               </div>
             ))}
+            {generalDeviations.map((dev, idx) => (
+              <div key={`g-${idx}`} className="text-xs text-red-600">
+                <strong>Note:</strong> {dev.note}
+              </div>
+            ))}
           </div>
         ) : (
-          <div className="mt-2 text-green-700 font-medium">✔️ Perfekt uttal!</div>
+          <div className="mt-2 text-green-700 font-medium">✔️ Excellent pronunciation!</div>
         )}
       </CardContent>
     </Card>
