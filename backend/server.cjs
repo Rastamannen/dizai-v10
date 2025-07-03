@@ -1,4 +1,4 @@
-// server.cjs – DizAí backend v1.0 (IPA + respelling, feedback till Assistant, transkript + audio)
+// server.cjs – DizAí backend v1.0 (Feedback logging to project context)
 
 const express = require("express");
 const multer = require("multer");
@@ -24,18 +24,6 @@ const exerciseCache = {}; // key: profile::theme => { exerciseSetId, exercises }
 const threadCache = {};   // key: profile::theme => thread.id
 const lockMap = {};       // key: profile::theme => lock flag
 
-function generateRespelling(phrase) {
-  return phrase
-    .replace(/ã/g, "an")
-    .replace(/ç/g, "s")
-    .replace(/lh/g, "ly")
-    .replace(/nh/g, "ny")
-    .replace(/qu/g, "k")
-    .replace(/v/g, "v")
-    .replace(/j/g, "zh")
-    .replace(/x/g, "sh");
-}
-
 async function fetchExercises(profile, theme) {
   const cacheKey = `${profile}::${theme}`;
   if (lockMap[cacheKey]) {
@@ -51,7 +39,7 @@ async function fetchExercises(profile, theme) {
     const thread = await openai.beta.threads.create();
     threadCache[cacheKey] = thread.id;
 
-    const prompt = `Johan and Petra are learning European Portuguese together using DizAí. Johan is training on the theme "${theme}". Return a new exercise set in strict JSON format with a unique "exerciseSetId" starting with "${theme}-". Use European Portuguese only. Include IPA. Avoid generic topics unless theme explicitly requires it. Each exercise must have a unique "exerciseId".`;
+    const prompt = `Johan and Petra are learning European Portuguese together using DizAí. Johan is training on the theme "${theme}". Return a new exercise set in strict JSON format with a unique "exerciseSetId" starting with "${theme}-". Use European Portuguese only. Include IPA and a user-friendly phonetic spelling. Avoid generic topics unless theme explicitly requires it. Each exercise must have a unique "exerciseId".`;
 
     await openai.beta.threads.messages.create(thread.id, {
       role: "user",
@@ -86,12 +74,10 @@ async function fetchExercises(profile, theme) {
 
       parsed.exercises = parsed.exercises.map((ex, i) => {
         let safeId = ex.exerciseId?.toString().trim();
-        if (!safeId) safeId = `${parsed.exerciseSetId}--${i}`;
-        return {
-          ...ex,
-          exerciseId: safeId,
-          respelling: generateRespelling(ex.phrase),
-        };
+        if (!safeId) {
+          safeId = `${parsed.exerciseSetId}--${i}`;
+        }
+        return { ...ex, exerciseId: safeId };
       });
 
       console.log("✅ Parsed exercise set:", parsed.exerciseSetId);
@@ -134,12 +120,6 @@ app.post("/api/analyze", upload.single("audio"), async (req, res) => {
   const { profile, exerciseId, exerciseSetId } = req.body;
   const transcript = "Simulated transcript";
   const feedback = "Perfect pronunciation!";
-  const theme = exerciseSetId?.split("-")[0];
-
-  const exercise =
-    exerciseCache[`${profile}::${theme}`]?.exercises.find(
-      (e) => e.exerciseId === exerciseId
-    ) || {};
 
   console.log("🎧 Analyze request received", {
     profile,
@@ -150,11 +130,21 @@ app.post("/api/analyze", upload.single("audio"), async (req, res) => {
   });
 
   try {
+    const theme = exerciseSetId?.split("-")[0];
     const threadId = threadCache[`${profile}::${theme}`];
     if (threadId && ASSISTANT_ID) {
+      const phrase = (exerciseCache[`${profile}::${theme}`]?.exercises || []).find(
+        (ex) => ex.exerciseId === exerciseId
+      )?.phrase || "";
+
       await openai.beta.threads.messages.create(threadId, {
         role: "user",
-        content: `Detailed feedback for ${profile} on exerciseId ${exerciseId} in set ${exerciseSetId}:\nOriginal: ${exercise.phrase}\nTranscript: ${transcript}\nIPA: ${exercise.ipa}\nRespelling: ${exercise.respelling}\nFeedback: ${feedback}`,
+        content: `Feedback for ${profile} on exerciseId ${exerciseId} in set ${exerciseSetId}:\nPhrase: ${phrase}\nTranscript: ${transcript}\nFeedback: ${feedback}`,
+      });
+
+      await openai.beta.threads.messages.create("proj-global-log", {
+        role: "user",
+        content: `LOG ENTRY: ${profile} did exercise ${exerciseId} (${phrase})\nTranscript: ${transcript}\nFeedback: ${feedback}`,
       });
     }
   } catch (err) {
