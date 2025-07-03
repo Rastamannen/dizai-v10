@@ -1,4 +1,4 @@
-// server.cjs – DizAí backend v1.0 (GET + POST + ny tråd per tema, strikt JSON)
+// server.cjs – DizAí backend v1.0 (exerciseId fixad + strikt JSON-kontroll)
 
 const express = require("express");
 const multer = require("multer");
@@ -35,10 +35,8 @@ async function fetchExercises(profile, theme) {
   try {
     if (!ASSISTANT_ID) throw new Error("Missing ASSISTANT_ID");
 
-    // 🧵 Ny tråd för varje nytt tema – undvik kontextspill!
     const thread = await openai.beta.threads.create();
-
-    const prompt = `Johan and Petra are learning European Portuguese together using DizAí. Johan is training on the theme "${theme}". Return a new exercise set in strict JSON format with a unique "exerciseSetId" starting with "${theme}-". Each exercise must include a unique string "exerciseId" field. Use European Portuguese only. Include IPA. Avoid generic topics unless theme explicitly requires it.`;
+    const prompt = `Johan and Petra are learning European Portuguese together using DizAí. Johan is training on the theme "${theme}". Return a new exercise set in strict JSON format with a unique "exerciseSetId" starting with "${theme}-". Each exercise must include a unique string "exerciseId" field. Use European Portuguese only. Include IPA.`;
 
     await openai.beta.threads.messages.create(thread.id, {
       role: "user",
@@ -71,12 +69,13 @@ async function fetchExercises(profile, theme) {
         throw new Error("Parsed JSON missing required fields");
       }
 
-      // Ensure all exercises have unique exerciseId
+      // 🚨 Tilldela unikt ID till varje övning om saknas
       parsed.exercises = parsed.exercises.map((ex, i) => {
-        if (!ex.exerciseId) {
-          ex.exerciseId = `${parsed.exerciseSetId}--${i}`;
+        let safeId = ex.exerciseId?.toString().trim();
+        if (!safeId) {
+          safeId = `${parsed.exerciseSetId}--${i}`;
         }
-        return ex;
+        return { ...ex, exerciseId: safeId };
       });
 
       console.log("✅ Parsed exercise set:", parsed.exerciseSetId);
@@ -98,7 +97,7 @@ async function fetchExercises(profile, theme) {
   }
 }
 
-// ✅ GET route (backward compatible)
+// ✅ GET route
 app.get("/api/exercise_set", async (req, res) => {
   const profile = req.query.profile || "default";
   const theme = req.query.theme || "everyday";
@@ -108,7 +107,7 @@ app.get("/api/exercise_set", async (req, res) => {
   res.json({ exerciseSetId, exercises });
 });
 
-// ✅ POST route (frontend-triggered temabyte)
+// ✅ POST route
 app.post("/api/exercise_set", async (req, res) => {
   const { profile = "default", theme = "everyday" } = req.body;
   console.log("📥 Incoming POST /exercise_set:", profile, theme);
@@ -117,6 +116,7 @@ app.post("/api/exercise_set", async (req, res) => {
   res.json({ exerciseSetId, exercises });
 });
 
+// 🧠 Simulerad analys
 app.post("/api/analyze", upload.single("audio"), async (req, res) => {
   const { profile, exerciseId, exerciseSetId } = req.body;
   const transcript = "Simulated transcript";
@@ -133,6 +133,7 @@ app.post("/api/analyze", upload.single("audio"), async (req, res) => {
   res.json({ transcript, feedback });
 });
 
+// 🔊 Text-to-Speech
 app.get("/api/tts", async (req, res) => {
   const text = req.query.text;
   if (!text) return res.status(400).send("Text required");
