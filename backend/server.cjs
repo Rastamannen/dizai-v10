@@ -8,6 +8,7 @@ const { OpenAI } = require("openai");
 const textToSpeech = require("@google-cloud/text-to-speech");
 const fs = require("fs");
 const util = require("util");
+const { File } = require("formdata-node"); // <--- FIX för OpenAI upload
 
 const app = express();
 const upload = multer();
@@ -105,25 +106,30 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
     const refAudio = req.files?.ref?.[0]?.buffer;
     if (!userAudio || !refAudio) throw new Error("Both audio files required");
 
-    const userStream = Readable.from(userAudio);
-    const refStream = Readable.from(refAudio);
+    const userFile = new File([userAudio], "user.webm", { type: "audio/webm" });
+    const refFile = new File([refAudio], "ref.webm", { type: "audio/webm" });
 
     console.log("🔊 Transcribing user audio...");
     const userTrans = await openai.audio.transcriptions.create({
-      file: userStream,
+      file: userFile,
       model: "whisper-1",
       response_format: "verbose_json"
     });
 
     console.log("🔊 Transcribing reference audio...");
     const refTrans = await openai.audio.transcriptions.create({
-      file: refStream,
+      file: refFile,
       model: "whisper-1",
       response_format: "verbose_json"
     });
 
     console.log("🧠 Comparing pronunciations...");
-    const gptPrompt = `Compare the pronunciation in these two utterances of the European Portuguese phrase "${exercise.phrase}". One is a native reference, the other is the user's attempt. Highlight any phonetic inaccuracies (e.g. final s pronounced hard, wrong vowel quality, nasal errors, etc.). Return:\n- Original phrase\n- User's transcript\n- A list of phoneme-level deviations\n- Annotated version of user's text (errors marked)\n- Overall assessment (perfect, tryagain)`;
+    const gptPrompt = `Compare the pronunciation in these two utterances of the European Portuguese phrase "${exercise.phrase}". One is a native reference, the other is the user's attempt. Highlight any phonetic inaccuracies (e.g. final s pronounced hard, wrong vowel quality, nasal errors, etc.). Return:
+- Original phrase
+- User's transcript
+- A list of phoneme-level deviations
+- Annotated version of user's text (errors marked)
+- Overall assessment (perfect, tryagain)`;
 
     const chat = await openai.chat.completions.create({
       model: "gpt-4o",
