@@ -1,4 +1,4 @@
-// server.cjs – DizAí backend v1.6 (Real Pronunciation Analysis)
+// server.cjs – DizAí backend v1.6.1 (Real Pronunciation Analysis + Logging)
 
 const express = require("express");
 const multer = require("multer");
@@ -15,9 +15,7 @@ app.use(cors());
 app.use(express.json());
 app.use(morgan("combined"));
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const ASSISTANT_ID = process.env.ASSISTANT_ID;
 const exerciseCache = {};
@@ -31,9 +29,13 @@ function getFeedbackStatus(comments) {
 
 async function createGlobalLogThread() {
   if (globalLogThreadId) return;
-  const thread = await openai.beta.threads.create();
-  globalLogThreadId = thread.id;
-  console.log("🧾 Global log thread created:", globalLogThreadId);
+  try {
+    const thread = await openai.beta.threads.create();
+    globalLogThreadId = thread.id;
+    console.log("🧾 Global log thread created:", globalLogThreadId);
+  } catch (err) {
+    console.error("❌ Failed to create global log thread:", err);
+  }
 }
 
 async function fetchExercises(profile, theme) {
@@ -67,7 +69,7 @@ async function fetchExercises(profile, theme) {
     exerciseCache[cacheKey] = { exerciseSetId: parsed.exerciseSetId, exercises: parsed.exercises };
     return exerciseCache[cacheKey];
   } catch (err) {
-    console.error("🚫 Fetch failed:", err.message);
+    console.error("🚫 Fetch failed:", err);
     return { exerciseSetId: null, exercises: [] };
   } finally {
     lockMap[cacheKey] = false;
@@ -93,68 +95,67 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
   const threadKey = `${profile}::${theme}`;
   const exercise = exerciseCache[threadKey]?.exercises?.find(e => e.exerciseId === exerciseId) || {};
 
-  const userAudio = req.files?.audio?.[0]?.buffer;
-  const refAudio = req.files?.ref?.[0]?.buffer;
-  if (!userAudio || !refAudio) return res.status(400).send("Both audio files required");
+  try {
+    const userAudio = req.files?.audio?.[0]?.buffer;
+    const refAudio = req.files?.ref?.[0]?.buffer;
+    if (!userAudio || !refAudio) throw new Error("Both audio files required");
 
-  const userTrans = await openai.audio.transcriptions.create({ file: userAudio, model: "whisper-1", response_format: "verbose_json" });
-  const refTrans = await openai.audio.transcriptions.create({ file: refAudio, model: "whisper-1", response_format: "verbose_json" });
+    console.log("🔊 Transcribing user audio...");
+    const userTrans = await openai.audio.transcriptions.create({ file: userAudio, model: "whisper-1", response_format: "verbose_json" });
 
-  const gptPrompt = `Compare the pronunciation in these two utterances of the European Portuguese phrase "${exercise.phrase}". One is a native reference, the other is the user's attempt. Highlight any phonetic inaccuracies (e.g. final s pronounced hard, wrong vowel quality, nasal errors, etc.). Return:
-- Original phrase
-- User's transcript
-- A list of phoneme-level deviations
-- Annotated version of user's text (errors marked)
-- Overall assessment (perfect, tryagain)
-`;
+    console.log("🔊 Transcribing reference audio...");
+    const refTrans = await openai.audio.transcriptions.create({ file: refAudio, model: "whisper-1", response_format: "verbose_json" });
 
-  const chat = await openai.chat.completions.create({
-    model: "gpt-4o",
-    messages: [
-      { role: "system", content: "You are a phonetic pronunciation expert for European Portuguese." },
-      { role: "user", content: gptPrompt },
-      { role: "user", content: `User transcript:
-${userTrans.text}
+    console.log("🧠 Running GPT comparison...");
+    const gptPrompt = `Compare the pronunciation in these two utterances of the European Portuguese phrase "${exercise.phrase}". One is a native reference, the other is the user's attempt. Highlight any phonetic inaccuracies (e.g. final s pronounced hard, wrong vowel quality, nasal errors, etc.). Return:\n- Original phrase\n- User's transcript\n- A list of phoneme-level deviations\n- Annotated version of user's text (errors marked)\n- Overall assessment (perfect, tryagain)`;
 
-Reference transcript:
-${refTrans.text}` }
-    ]
-  });
-
-  const feedbackText = chat.choices[0]?.message?.content;
-  const status = feedbackText.includes("perfect") ? "perfect" : "tryagain";
-
-  const feedbackObject = {
-    profile,
-    exerciseSetId,
-    exerciseId,
-    phrase: exercise.phrase,
-    ipa: exercise.ipa,
-    phonetic: exercise.phonetic,
-    userTranscript: userTrans.text,
-    refTranscript: refTrans.text,
-    feedback: feedbackText,
-    status,
-    timestamp: new Date().toISOString(),
-  };
-
-  const threadId = threadCache[threadKey];
-  if (threadId && ASSISTANT_ID) {
-    await openai.beta.threads.messages.create(threadId, {
-      role: "user",
-      content: `Feedback for ${profile} on exerciseId ${exerciseId}:
-${JSON.stringify(feedbackObject, null, 2)}`
+    const chat = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: "You are a phonetic pronunciation expert for European Portuguese." },
+        { role: "user", content: gptPrompt },
+        { role: "user", content: `User transcript:\n${userTrans.text}\n\nReference transcript:\n${refTrans.text}` }
+      ]
     });
-    if (globalLogThreadId) {
-      await openai.beta.threads.messages.create(globalLogThreadId, {
-        role: "user",
-        content: `LOG ENTRY:
-${JSON.stringify(feedbackObject, null, 2)}`
-      });
-    }
-  }
 
-  res.json({ transcript: userTrans.text, feedback: feedbackText });
+    const feedbackText = chat.choices[0]?.message?.content || "No response from GPT.";
+    const status = feedbackText.includes("perfect") ? "perfect" : "tryagain";
+
+    const feedbackObject = {
+      profile,
+      exerciseSetId,
+      exerciseId,
+      phrase: exercise.phrase,
+      ipa: exercise.ipa,
+      phonetic: exercise.phonetic,
+      userTranscript: userTrans.text,
+      refTranscript: refTrans.text,
+      feedback: feedbackText,
+      status,
+      timestamp: new Date().toISOString(),
+    };
+
+    console.log("🧾 Feedback:", feedbackObject);
+
+    const threadId = threadCache[threadKey];
+    if (threadId && ASSISTANT_ID) {
+      await openai.beta.threads.messages.create(threadId, {
+        role: "user",
+        content: `Feedback for ${profile} on exerciseId ${exerciseId} in set ${exerciseSetId}:\n${JSON.stringify(feedbackObject, null, 2)}`
+      });
+      if (globalLogThreadId) {
+        await openai.beta.threads.messages.create(globalLogThreadId, {
+          role: "user",
+          content: `LOG ENTRY:\n${JSON.stringify(feedbackObject, null, 2)}`
+        });
+      }
+    }
+
+    res.json({ transcript: userTrans.text, feedback: feedbackText });
+  } catch (err) {
+    console.error("❌ Analysis failed:", err);
+    res.json({ transcript: "", feedback: "Error during analysis: " + err.message });
+  }
 });
 
 app.get("/api/tts", async (req, res) => {
@@ -177,7 +178,7 @@ app.get("/api/tts", async (req, res) => {
     res.set({ "Content-Type": "audio/mpeg" });
     res.send(tts.data);
   } catch (err) {
-    console.error("TTS failed", err);
+    console.error("❌ TTS failed:", err);
     res.status(500).send("TTS failed");
   }
 });
