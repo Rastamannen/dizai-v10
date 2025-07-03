@@ -1,4 +1,4 @@
-// App.jsx – DizAí v1.3.2 (improved UX, robust feedback handling, mobile-ready)
+// App.jsx – DizAí v1.5 (full feedback loop, phonetic UX, profile-aware)
 
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
@@ -109,8 +109,6 @@ export default function App() {
 
         if (refAudioBlob) {
           formData.append("ref", refAudioBlob, "ref.mp3");
-        } else {
-          console.warn("⚠️ No reference audio blob available");
         }
 
         try {
@@ -176,12 +174,14 @@ export default function App() {
     <div className="dizai-app">
       <header>
         <img src={logoUrl} alt="DizAi logo" style={{ height: 48 }} />
-        <span style={{ fontSize: "2.2rem", fontWeight: 800 }}>DizAí v1.3.2</span>
+        <span style={{ fontSize: "2.2rem", fontWeight: 800 }}>DizAí v1.5</span>
         <input value={theme} onChange={handleThemeChange} onKeyDown={handleKeyDown} placeholder="Theme" />
       </header>
 
       <main>
-        <button onClick={() => setProfile(profile === "Johan" ? "Petra" : "Johan")}>Switch to {profile === "Johan" ? "Petra" : "Johan"}</button>
+        <button onClick={() => setProfile(profile === "Johan" ? "Petra" : "Johan")}>
+          Switch to {profile === "Johan" ? "Petra" : "Johan"}
+        </button>
 
         <h2>{exText}</h2>
         <div>
@@ -198,14 +198,16 @@ export default function App() {
         {audioUrl && <audio controls src={audioUrl} />}
 
         <div>
-          <button onClick={handleRecord} disabled={recording}>{recording ? "🔴 Recording..." : "🎤 Record"}</button>
+          <button onClick={handleRecord} disabled={recording}>
+            {recording ? "🔴 Recording..." : "🎤 Record"}
+          </button>
           {recording && <button onClick={handleStop}>Stop</button>}
         </div>
 
-        {feedback && (
+        {feedback && !feedback.error && (
           <PronunciationFeedback
-            native={feedback.original || feedback.native || ""}
-            attempt={feedback.attempt || transcript || ""}
+            native={feedback.native || exText}
+            attempt={feedback.attempt || transcript}
             deviations={feedback.deviations || []}
           />
         )}
@@ -215,7 +217,7 @@ export default function App() {
         )}
 
         <button onClick={handlePrev} disabled={exerciseIdx === 0}>Prev</button>
-        <button onClick={handleNext}>Next</button>
+        <button onClick={handleNext} disabled={exerciseIdx >= exercises.length - 1}>Next</button>
         <button onClick={handleReload}>🔄 Load new questions</button>
       </main>
     </div>
