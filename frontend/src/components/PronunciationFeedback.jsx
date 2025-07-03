@@ -1,4 +1,3 @@
-// PronunciationFeedback.jsx
 import React from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
@@ -12,35 +11,53 @@ const getColor = (severity) => {
 export default function PronunciationFeedback({ native, attempt, deviations }) {
   const attemptWords = attempt.split(" ");
 
+  // Kopplar ihop fel med indexnummer
   const colorMap = {};
-  deviations.forEach(({ word, severity }) => {
-    colorMap[word.toLowerCase()] = severity;
+  const errorNotes = [];
+  let counter = 1;
+
+  deviations.forEach(({ word, severity, note }) => {
+    const key = word.toLowerCase();
+    if (!colorMap[key]) {
+      colorMap[key] = { severity, index: counter };
+      errorNotes.push({ index: counter, word, note });
+      counter++;
+    }
   });
 
   return (
-    <Card className="w-full p-4 md:p-6 text-sm md:text-base">
-      <CardContent className="space-y-3">
-        <div className="text-muted-foreground text-xs md:text-sm">Native phrase:</div>
-        <div className="font-medium leading-relaxed">{native}</div>
-
-        <div className="text-muted-foreground text-xs md:text-sm">Your attempt:</div>
-        <div className="font-medium leading-relaxed flex flex-wrap gap-1">
-          {attemptWords.map((word, idx) => {
-            const clean = word.toLowerCase().replace(/[.,!?]/g, "");
-            const severity = colorMap[clean];
-            const obs = deviations.find((d) => d.word.toLowerCase() === clean)?.note;
-            return (
-              <div key={idx} className="relative group">
-                <span className={cn(getColor(severity))}>{word}</span>
-                {obs && (
-                  <div className="absolute top-full left-0 mt-1 w-max bg-background shadow px-2 py-1 text-xs rounded hidden group-hover:block z-10 border">
-                    {obs}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+    <Card className="w-full p-4 md:p-6 text-sm md:text-base space-y-4">
+      <CardContent className="space-y-2">
+        <div>
+          <div className="text-muted-foreground text-xs">Original</div>
+          <div className="font-semibold">{native}</div>
         </div>
+
+        <div>
+          <div className="text-muted-foreground text-xs">Your attempt</div>
+          <div className="font-semibold flex flex-wrap gap-x-2 gap-y-1">
+            {attemptWords.map((word, idx) => {
+              const clean = word.toLowerCase().replace(/[.,!?]/g, "");
+              const colorObj = colorMap[clean];
+              return (
+                <span key={idx} className={cn(getColor(colorObj?.severity))}>
+                  {word}
+                  {colorObj && <sup>{colorObj.index}</sup>}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+
+        {errorNotes.length > 0 && (
+          <div className="pt-2 border-t space-y-1 text-xs">
+            {errorNotes.map(({ index, word, note }) => (
+              <div key={index}>
+                <strong>{index}.</strong> <em>{word}</em> – {note}
+              </div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
