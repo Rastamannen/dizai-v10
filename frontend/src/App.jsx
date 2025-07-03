@@ -65,14 +65,15 @@ export default function App() {
     }
   }, [recording, mediaStream]);
 
-  async function loadExerciseSet(selectedTheme = theme) {
+  async function loadExerciseSet(selectedTheme) {
     try {
-      const res = await axios.get(`${API_URL}/api/exercise_set?profile=${profile}&theme=${selectedTheme}`);
-      if (res.data.exerciseSetId !== exerciseSetId) {
-        setExerciseSetId(res.data.exerciseSetId);
-        setExercises(res.data.exercises);
-        setExerciseIdx(0);
-      }
+      const res = await axios.post(`${API_URL}/api/exercise_set`, {
+        profile,
+        theme: selectedTheme,
+      });
+      setExerciseSetId(res.data.exerciseSetId || null);
+      setExercises(res.data.exercises || []);
+      setExerciseIdx(0);
     } catch (err) {
       console.error("❌ Failed to load exercises", err);
       setExercises([]);
@@ -128,7 +129,7 @@ export default function App() {
   }
 
   function handleThemeChange(e) {
-    const newTheme = e.target.value;
+    const newTheme = e.target.value.trim();
     setTheme(newTheme);
     localStorage.setItem("dizai-theme", newTheme);
   }
@@ -183,7 +184,9 @@ export default function App() {
       </header>
 
       <main style={{ padding: 20 }}>
-        <button className="profile-btn" onClick={() => setProfile(profile === "Johan" ? "Petra" : "Johan")}>Switch to {profile === "Johan" ? "Petra" : "Johan"}</button>
+        <button className="profile-btn" onClick={() => setProfile(profile === "Johan" ? "Petra" : "Johan")}>
+          Switch to {profile === "Johan" ? "Petra" : "Johan"}
+        </button>
 
         <h2 className="exercise-text">{exText}</h2>
         <div className="ipa">
@@ -191,7 +194,7 @@ export default function App() {
         </div>
 
         {audioUrl && (
-          <audio controls src={audioUrl} style={{ width: "100%", background: "#F6F9FF", margin: "18px 0 16px 0" }}></audio>
+          <audio controls src={audioUrl} style={{ width: "100%", background: "#F6F9FF", margin: "18px 0 16px 0" }} />
         )}
 
         <div style={{ display: "flex", gap: 16, marginBottom: 8 }}>
@@ -203,7 +206,9 @@ export default function App() {
             {recording ? "Recording..." : "🎤 Record"}
           </button>
           {recording && (
-            <button className="stop-btn" onClick={handleStop} style={{ background: "#D1495B", color: "#fff" }}>Stop</button>
+            <button className="stop-btn" onClick={handleStop} style={{ background: "#D1495B", color: "#fff" }}>
+              Stop
+            </button>
           )}
         </div>
 
