@@ -3,6 +3,7 @@ const multer = require("multer");
 const cors = require("cors");
 const axios = require("axios");
 const morgan = require("morgan");
+const { Readable } = require("stream");
 const { OpenAI } = require("openai");
 
 const app = express();
@@ -100,16 +101,19 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
     const refAudio = req.files?.ref?.[0]?.buffer;
     if (!userAudio || !refAudio) throw new Error("Both audio files required");
 
+    const userStream = Readable.from(userAudio);
+    const refStream = Readable.from(refAudio);
+
     console.log("🔊 Transcribing user audio...");
     const userTrans = await openai.audio.transcriptions.create({
-      file: userAudio,
+      file: userStream,
       model: "whisper-1",
       response_format: "verbose_json"
     });
 
     console.log("🔊 Transcribing reference audio...");
     const refTrans = await openai.audio.transcriptions.create({
-      file: refAudio,
+      file: refStream,
       model: "whisper-1",
       response_format: "verbose_json"
     });
