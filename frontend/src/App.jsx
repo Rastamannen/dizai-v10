@@ -1,4 +1,4 @@
-// App.jsx - DizAí v1.0 (med temat visat och knapp för manuell omladdning av övningar)
+// App.jsx - DizAí v1.0 (flexibelt JSON-stöd: text/phrase/IPA/ipa)
 
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
@@ -23,6 +23,15 @@ function getFeedbackColor(feedback) {
   return FEEDBACK_COLORS.tryagain;
 }
 
+// Helpers to handle flexible field names
+function getExerciseText(ex) {
+  return ex.text || ex.phrase || ex.sentence || "";
+}
+
+function getExerciseIPA(ex) {
+  return ex.ipa || ex.IPA || ex.phonetic_transcription || "";
+}
+
 export default function App() {
   const [profile, setProfile] = useState("Johan");
   const [exerciseIdx, setExerciseIdx] = useState(0);
@@ -44,10 +53,9 @@ export default function App() {
     if (!exercises.length) return;
     setTranscript("");
     setFeedback("");
+    const text = getExerciseText(exercises[exerciseIdx]);
     setAudioUrl(
-      `${API_URL}/api/tts?text=${encodeURIComponent(
-        exercises[exerciseIdx].text
-      )}&lang=pt-PT`
+      text ? `${API_URL}/api/tts?text=${encodeURIComponent(text)}&lang=pt-PT` : null
     );
   }, [exerciseIdx, exercises]);
 
@@ -66,11 +74,7 @@ export default function App() {
         setExercises(res.data.exercises);
         setExerciseIdx(0);
       }
-      if (res.data.theme) {
-        setTheme(res.data.theme);
-      } else {
-        setTheme("");
-      }
+      setTheme(res.data.theme || "");
     } catch (err) {
       setExercises([]);
       setTheme("");
@@ -145,18 +149,12 @@ export default function App() {
   if (!exercises.length) return <div className="loading">Loading...</div>;
 
   const ex = exercises[exerciseIdx];
+  const exText = getExerciseText(ex);
+  const exIPA = getExerciseIPA(ex);
 
   return (
     <div className="dizai-app">
-      <header
-        style={{
-          display: "flex",
-          alignItems: "center",
-          gap: 16,
-          padding: "18px 0 0 16px",
-          flexDirection: "column",
-        }}
-      >
+      <header style={{ display: "flex", alignItems: "center", gap: 16, padding: "18px 0 0 16px", flexDirection: "column" }}>
         <div style={{ display: "flex", alignItems: "center" }}>
           <img src={logoUrl} alt="DizAi logo" style={{ height: 48, marginRight: 18 }} />
           <span style={{ fontSize: "2.2rem", color: "#0033A0", fontWeight: 800 }}>DizAí v1.0</span>
@@ -169,32 +167,27 @@ export default function App() {
       </header>
 
       <main style={{ padding: 20 }}>
-        <button className="profile-btn" onClick={() => setProfile(profile === "Johan" ? "Petra" : "Johan")}>
-          Switch to {profile === "Johan" ? "Petra" : "Johan"}
-        </button>
-        <h2 className="exercise-text">{ex.text}</h2>
+        <button className="profile-btn" onClick={() => setProfile(profile === "Johan" ? "Petra" : "Johan")}>Switch to {profile === "Johan" ? "Petra" : "Johan"}</button>
+
+        <h2 className="exercise-text">{exText}</h2>
         <div className="ipa">
-          IPA: <span style={{ color: "#0033A0", fontWeight: 600 }}>{ex.ipa}</span>
+          IPA: <span style={{ color: "#0033A0", fontWeight: 600 }}>{exIPA}</span>
         </div>
-        <audio
-          controls
-          src={audioUrl}
-          style={{ width: "100%", background: "#F6F9FF", margin: "18px 0 16px 0" }}
-        ></audio>
+
+        {audioUrl && (
+          <audio controls src={audioUrl} style={{ width: "100%", background: "#F6F9FF", margin: "18px 0 16px 0" }}></audio>
+        )}
 
         <div style={{ display: "flex", gap: 16, marginBottom: 8 }}>
           <button
             className="record-btn"
             onClick={handleRecord}
             disabled={recording}
-            style={{ background: recording ? "#D49F1B" : "#0033A0", color: "#fff", fontWeight: 700 }}
-          >
+            style={{ background: recording ? "#D49F1B" : "#0033A0", color: "#fff", fontWeight: 700 }}>
             {recording ? "Recording..." : "🎤 Record"}
           </button>
           {recording && (
-            <button className="stop-btn" onClick={handleStop} style={{ background: "#D1495B", color: "#fff" }}>
-              Stop
-            </button>
+            <button className="stop-btn" onClick={handleStop} style={{ background: "#D1495B", color: "#fff" }}>Stop</button>
           )}
         </div>
 
@@ -202,35 +195,15 @@ export default function App() {
           <span style={{ fontWeight: 700, color: "#0033A0" }}>Transcript:</span>{" "}
           {transcript ? renderTranscript() : ""}
         </div>
-        <div
-          className="feedback"
-          style={{ fontWeight: 700, fontSize: "1.2rem", color: getFeedbackColor(feedback), margin: "10px 0" }}
-        >
-          {feedback}
-        </div>
+        <div className="feedback" style={{ fontWeight: 700, fontSize: "1.2rem", color: getFeedbackColor(feedback), margin: "10px 0" }}>{feedback}</div>
 
         <div style={{ display: "flex", gap: 16 }}>
-          <button
-            className="nav-btn"
-            disabled={exerciseIdx === 0}
-            onClick={handlePrev}
-            style={{ background: "#8E9775", color: "#fff", fontWeight: 700 }}
-          >
-            Prev
-          </button>
-          <button
-            className="nav-btn"
-            onClick={handleNext}
-            style={{ background: "#0033A0", color: "#fff", fontWeight: 700 }}
-          >
-            Next
-          </button>
+          <button className="nav-btn" disabled={exerciseIdx === 0} onClick={handlePrev} style={{ background: "#8E9775", color: "#fff", fontWeight: 700 }}>Prev</button>
+          <button className="nav-btn" onClick={handleNext} style={{ background: "#0033A0", color: "#fff", fontWeight: 700 }}>Next</button>
         </div>
 
         <div style={{ marginTop: 40, textAlign: "center" }}>
-          <button onClick={handleReload} style={{ padding: "8px 16px", fontSize: "16px" }}>
-            🔄 Load new questions
-          </button>
+          <button onClick={handleReload} style={{ padding: "8px 16px", fontSize: "16px" }}>🔄 Load new questions</button>
         </div>
       </main>
     </div>
