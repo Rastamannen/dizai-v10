@@ -1,4 +1,4 @@
-// server.cjs – DizAí v1.4 (refined phonetic feedback, no hardcoded reference)
+// server.cjs – DizAí v1.3 backend with JSON fix and phonetic feedback
 
 const express = require("express");
 const multer = require("multer");
@@ -26,6 +26,11 @@ const exerciseCache = {};
 const threadCache = {};
 const lockMap = {};
 let globalLogThreadId = null;
+
+function getFeedbackStatus(text) {
+  if (text.toLowerCase().includes("perfect")) return "perfect";
+  return "tryagain";
+}
 
 async function createGlobalLogThread() {
   if (globalLogThreadId) return;
@@ -60,7 +65,10 @@ async function fetchExercises(profile, theme) {
     const messages = await openai.beta.threads.messages.list(thread.id);
     const last = messages.data.find(m => m.role === "assistant");
     const content = last.content?.[0]?.text?.value?.trim();
-    const parsed = JSON.parse(content);
+
+    const jsonMatch = content.match(/```json\s*([\s\S]+?)\s*```/i) || content.match(/{[\s\S]+}/);
+    const jsonString = jsonMatch ? jsonMatch[1] || jsonMatch[0] : null;
+    const parsed = JSON.parse(jsonString);
 
     parsed.exercises = parsed.exercises.map((ex, i) => ({
       ...ex,
@@ -107,29 +115,25 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
     const userTrans = await openai.audio.transcriptions.create({ file: userFile, model: "whisper-1", response_format: "verbose_json" });
     const refTrans = await openai.audio.transcriptions.create({ file: refFile, model: "whisper-1", response_format: "verbose_json" });
 
-    const gptPrompt = `You will compare the pronunciation in two recordings of the same phrase in European Portuguese. One is a native reference, the other is a learner's attempt.
-
-Return a JSON object with:
-- native: the native speaker's transcript
-- attempt: the user's transcript
-- deviations: an array of objects for each word where the user's pronunciation deviated, each including:
-  - word: the user’s word
-  - severity: "minor" or "major"
-  - note: short note explaining the mispronunciation
-
-Be concise, objective, and use English throughout. Avoid filler text.`;
+    const gptPrompt = `Compare the pronunciation in these two utterances of the European Portuguese phrase "${exercise.phrase}". One is a native reference, the other is the user's attempt. Highlight any phonetic inaccuracies (e.g. final s pronounced hard, wrong vowel quality, nasal errors, etc.). Return:
+- Native phrase
+- User's attempt
+- Word-level deviations with severity (minor/major) and short note
+Return a JSON object with fields: native, attempt, deviations.`;
 
     const chat = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
         { role: "system", content: "You are a phonetic pronunciation expert for European Portuguese." },
         { role: "user", content: gptPrompt },
-        { role: "user", content: `Native transcript:\n${refTrans.text}\n\nUser transcript:\n${userTrans.text}` }
+        { role: "user", content: `User transcript:\n${userTrans.text}\n\nReference transcript:\n${refTrans.text}` }
       ]
     });
 
-    const parsedFeedback = chat.choices[0]?.message?.content;
-    const parsed = JSON.parse(parsedFeedback);
+    const gptContent = chat.choices[0]?.message?.content || "{}";
+    const jsonMatch = gptContent.match(/```json\s*([\s\S]+?)\s*```/i) || gptContent.match(/{[\s\S]+}/);
+    const jsonString = jsonMatch ? jsonMatch[1] || jsonMatch[0] : null;
+    const parsed = JSON.parse(jsonString);
 
     const feedbackObject = {
       profile,
@@ -138,10 +142,11 @@ Be concise, objective, and use English throughout. Avoid filler text.`;
       phrase: exercise.phrase,
       ipa: exercise.ipa,
       phonetic: exercise.phonetic,
-      userTranscript: parsed.attempt,
-      refTranscript: parsed.native,
+      userTranscript: userTrans.text,
+      refTranscript: refTrans.text,
       deviations: parsed.deviations,
-      status: parsed.deviations?.length ? "tryagain" : "perfect",
+      feedback: parsed,
+      status: getFeedbackStatus(JSON.stringify(parsed)),
       timestamp: new Date().toISOString(),
     };
 
@@ -149,19 +154,17 @@ Be concise, objective, and use English throughout. Avoid filler text.`;
     if (threadId && ASSISTANT_ID) {
       await openai.beta.threads.messages.create(threadId, {
         role: "user",
-        content: `Feedback for ${profile} on exerciseId ${exerciseId} in set ${exerciseSetId}:
-${JSON.stringify(feedbackObject, null, 2)}`
+        content: `Feedback for ${profile} on exerciseId ${exerciseId} in set ${exerciseSetId}:\n${JSON.stringify(feedbackObject, null, 2)}`
       });
       if (globalLogThreadId) {
         await openai.beta.threads.messages.create(globalLogThreadId, {
           role: "user",
-          content: `LOG ENTRY:
-${JSON.stringify(feedbackObject, null, 2)}`
+          content: `LOG ENTRY:\n${JSON.stringify(feedbackObject, null, 2)}`
         });
       }
     }
 
-    res.json(feedbackObject);
+    res.json({ transcript: userTrans.text, feedback: parsed });
   } catch (err) {
     console.error("❌ Analysis error:", err);
     res.json({ transcript: "", feedback: "Error during analysis: " + err.message });
@@ -174,13 +177,8 @@ app.get("/api/tts", async (req, res) => {
 
   const request = {
     input: { text },
-    voice: {
-      languageCode: "pt-PT",
-      name: "pt-PT-Standard-A",
-    },
-    audioConfig: {
-      audioEncoding: "MP3",
-    },
+    voice: { languageCode: "pt-PT", name: "pt-PT-Standard-A" },
+    audioConfig: { audioEncoding: "MP3" },
   };
 
   try {
