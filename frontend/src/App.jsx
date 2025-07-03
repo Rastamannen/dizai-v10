@@ -1,4 +1,4 @@
-// App.jsx – DizAí v1.3 (correct alias, ref audio, PronunciationFeedback integrated)
+// App.jsx – DizAí v1.3.1 (always show feedback panel, even with perfect match)
 
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
@@ -112,7 +112,7 @@ export default function App() {
       try {
         const resp = await axios.post(`${API_URL}/api/analyze`, formData);
         setTranscript(resp.data.transcript);
-        setFeedback(resp.data.feedback); // object with original, attempt, deviations
+        setFeedback(resp.data.feedback);
       } catch (err) {
         console.error("❌ Analyze error", err);
         setFeedback({ error: "Error during analysis." });
@@ -168,7 +168,7 @@ export default function App() {
     <div className="dizai-app">
       <header>
         <img src={logoUrl} alt="DizAi logo" style={{ height: 48 }} />
-        <span style={{ fontSize: "2.2rem", fontWeight: 800 }}>DizAí v1.3</span>
+        <span style={{ fontSize: "2.2rem", fontWeight: 800 }}>DizAí v1.3.1</span>
         <input value={theme} onChange={handleThemeChange} onKeyDown={handleKeyDown} placeholder="Theme" />
       </header>
 
@@ -196,9 +196,9 @@ export default function App() {
           {recording && <button onClick={handleStop}>Stop</button>}
         </div>
 
-        {feedback && feedback.original && (
+        {feedback && feedback.attempt && (
           <PronunciationFeedback
-            native={feedback.original}
+            native={feedback.original || ""}
             attempt={feedback.attempt}
             deviations={feedback.deviations || []}
           />
