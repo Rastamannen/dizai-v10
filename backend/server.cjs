@@ -1,3 +1,5 @@
+// server.cjs – DizAí v1.4 (refined phonetic feedback, no hardcoded reference)
+
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
@@ -6,9 +8,7 @@ const morgan = require("morgan");
 const { Readable } = require("stream");
 const { OpenAI } = require("openai");
 const textToSpeech = require("@google-cloud/text-to-speech");
-const fs = require("fs");
-const util = require("util");
-const { File } = require("formdata-node"); // <--- FIX för OpenAI upload
+const { File } = require("formdata-node");
 
 const app = express();
 const upload = multer();
@@ -26,11 +26,6 @@ const exerciseCache = {};
 const threadCache = {};
 const lockMap = {};
 let globalLogThreadId = null;
-
-function getFeedbackStatus(text) {
-  if (text.toLowerCase().includes("perfect")) return "perfect";
-  return "tryagain";
-}
 
 async function createGlobalLogThread() {
   if (globalLogThreadId) return;
@@ -109,39 +104,32 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
     const userFile = new File([userAudio], "user.webm", { type: "audio/webm" });
     const refFile = new File([refAudio], "ref.webm", { type: "audio/webm" });
 
-    console.log("🔊 Transcribing user audio...");
-    const userTrans = await openai.audio.transcriptions.create({
-      file: userFile,
-      model: "whisper-1",
-      response_format: "verbose_json"
-    });
+    const userTrans = await openai.audio.transcriptions.create({ file: userFile, model: "whisper-1", response_format: "verbose_json" });
+    const refTrans = await openai.audio.transcriptions.create({ file: refFile, model: "whisper-1", response_format: "verbose_json" });
 
-    console.log("🔊 Transcribing reference audio...");
-    const refTrans = await openai.audio.transcriptions.create({
-      file: refFile,
-      model: "whisper-1",
-      response_format: "verbose_json"
-    });
+    const gptPrompt = `You will compare the pronunciation in two recordings of the same phrase in European Portuguese. One is a native reference, the other is a learner's attempt.
 
-    console.log("🧠 Comparing pronunciations...");
-    const gptPrompt = `Compare the pronunciation in these two utterances of the European Portuguese phrase "${exercise.phrase}". One is a native reference, the other is the user's attempt. Highlight any phonetic inaccuracies (e.g. final s pronounced hard, wrong vowel quality, nasal errors, etc.). Return:
-- Original phrase
-- User's transcript
-- A list of phoneme-level deviations
-- Annotated version of user's text (errors marked)
-- Overall assessment (perfect, tryagain)`;
+Return a JSON object with:
+- native: the native speaker's transcript
+- attempt: the user's transcript
+- deviations: an array of objects for each word where the user's pronunciation deviated, each including:
+  - word: the user’s word
+  - severity: "minor" or "major"
+  - note: short note explaining the mispronunciation
+
+Be concise, objective, and use English throughout. Avoid filler text.`;
 
     const chat = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
         { role: "system", content: "You are a phonetic pronunciation expert for European Portuguese." },
         { role: "user", content: gptPrompt },
-        { role: "user", content: `User transcript:\n${userTrans.text}\n\nReference transcript:\n${refTrans.text}` }
+        { role: "user", content: `Native transcript:\n${refTrans.text}\n\nUser transcript:\n${userTrans.text}` }
       ]
     });
 
-    const feedbackText = chat.choices[0]?.message?.content || "No response from GPT.";
-    const status = getFeedbackStatus(feedbackText);
+    const parsedFeedback = chat.choices[0]?.message?.content;
+    const parsed = JSON.parse(parsedFeedback);
 
     const feedbackObject = {
       profile,
@@ -150,30 +138,30 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
       phrase: exercise.phrase,
       ipa: exercise.ipa,
       phonetic: exercise.phonetic,
-      userTranscript: userTrans.text,
-      refTranscript: refTrans.text,
-      feedback: feedbackText,
-      status,
+      userTranscript: parsed.attempt,
+      refTranscript: parsed.native,
+      deviations: parsed.deviations,
+      status: parsed.deviations?.length ? "tryagain" : "perfect",
       timestamp: new Date().toISOString(),
     };
-
-    console.log("🧾 Feedback object:", feedbackObject);
 
     const threadId = threadCache[threadKey];
     if (threadId && ASSISTANT_ID) {
       await openai.beta.threads.messages.create(threadId, {
         role: "user",
-        content: `Feedback for ${profile} on exerciseId ${exerciseId} in set ${exerciseSetId}:\n${JSON.stringify(feedbackObject, null, 2)}`
+        content: `Feedback for ${profile} on exerciseId ${exerciseId} in set ${exerciseSetId}:
+${JSON.stringify(feedbackObject, null, 2)}`
       });
       if (globalLogThreadId) {
         await openai.beta.threads.messages.create(globalLogThreadId, {
           role: "user",
-          content: `LOG ENTRY:\n${JSON.stringify(feedbackObject, null, 2)}`
+          content: `LOG ENTRY:
+${JSON.stringify(feedbackObject, null, 2)}`
         });
       }
     }
 
-    res.json({ transcript: userTrans.text, feedback: feedbackText });
+    res.json(feedbackObject);
   } catch (err) {
     console.error("❌ Analysis error:", err);
     res.json({ transcript: "", feedback: "Error during analysis: " + err.message });
