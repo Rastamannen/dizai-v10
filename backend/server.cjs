@@ -1,5 +1,3 @@
-// server.cjs – DizAí backend v1.6.1 (Real Pronunciation Analysis + Logging)
-
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
@@ -23,8 +21,9 @@ const threadCache = {};
 const lockMap = {};
 let globalLogThreadId = null;
 
-function getFeedbackStatus(comments) {
-  return comments.length === 0 ? "perfect" : "tryagain";
+function getFeedbackStatus(text) {
+  if (text.toLowerCase().includes("perfect")) return "perfect";
+  return "tryagain";
 }
 
 async function createGlobalLogThread() {
@@ -50,6 +49,7 @@ async function fetchExercises(profile, theme) {
 
     await openai.beta.threads.messages.create(thread.id, { role: "user", content: prompt });
     const run = await openai.beta.threads.runs.create(thread.id, { assistant_id: ASSISTANT_ID });
+
     let runStatus;
     do {
       await new Promise(res => setTimeout(res, 500));
@@ -101,12 +101,20 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
     if (!userAudio || !refAudio) throw new Error("Both audio files required");
 
     console.log("🔊 Transcribing user audio...");
-    const userTrans = await openai.audio.transcriptions.create({ file: userAudio, model: "whisper-1", response_format: "verbose_json" });
+    const userTrans = await openai.audio.transcriptions.create({
+      file: userAudio,
+      model: "whisper-1",
+      response_format: "verbose_json"
+    });
 
     console.log("🔊 Transcribing reference audio...");
-    const refTrans = await openai.audio.transcriptions.create({ file: refAudio, model: "whisper-1", response_format: "verbose_json" });
+    const refTrans = await openai.audio.transcriptions.create({
+      file: refAudio,
+      model: "whisper-1",
+      response_format: "verbose_json"
+    });
 
-    console.log("🧠 Running GPT comparison...");
+    console.log("🧠 Comparing pronunciations...");
     const gptPrompt = `Compare the pronunciation in these two utterances of the European Portuguese phrase "${exercise.phrase}". One is a native reference, the other is the user's attempt. Highlight any phonetic inaccuracies (e.g. final s pronounced hard, wrong vowel quality, nasal errors, etc.). Return:\n- Original phrase\n- User's transcript\n- A list of phoneme-level deviations\n- Annotated version of user's text (errors marked)\n- Overall assessment (perfect, tryagain)`;
 
     const chat = await openai.chat.completions.create({
@@ -119,7 +127,7 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
     });
 
     const feedbackText = chat.choices[0]?.message?.content || "No response from GPT.";
-    const status = feedbackText.includes("perfect") ? "perfect" : "tryagain";
+    const status = getFeedbackStatus(feedbackText);
 
     const feedbackObject = {
       profile,
@@ -135,7 +143,7 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
       timestamp: new Date().toISOString(),
     };
 
-    console.log("🧾 Feedback:", feedbackObject);
+    console.log("🧾 Feedback object:", feedbackObject);
 
     const threadId = threadCache[threadKey];
     if (threadId && ASSISTANT_ID) {
@@ -153,7 +161,7 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
 
     res.json({ transcript: userTrans.text, feedback: feedbackText });
   } catch (err) {
-    console.error("❌ Analysis failed:", err);
+    console.error("❌ Analysis error:", err);
     res.json({ transcript: "", feedback: "Error during analysis: " + err.message });
   }
 });
@@ -167,7 +175,7 @@ app.get("/api/tts", async (req, res) => {
       model: "tts-1",
       voice: "echo",
       input: text,
-      speed: 0.6
+      speed: 1.0
     }, {
       headers: {
         Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
