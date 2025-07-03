@@ -67,7 +67,7 @@ export default function App() {
 
   async function loadExerciseSet() {
     try {
-      const res = await axios.get(`${API_URL}/api/exercise_set?profile=${profile}`);
+      const res = await axios.get(`${API_URL}/api/exercise_set?profile=${profile}&theme=${encodeURIComponent(theme)}`);
       if (res.data.exerciseSetId !== exerciseSetId) {
         setExerciseSetId(res.data.exerciseSetId);
         setExercises(res.data.exercises);
