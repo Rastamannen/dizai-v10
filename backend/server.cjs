@@ -1,4 +1,4 @@
-// server.cjs – DizAí backend v1.0 med GPT-styrd temahantering (med körlås per GPT-thread)
+// server.cjs – DizAí backend v1.0 med GPT-styrd temahantering (körlås + cachning per profil+tema)
 
 const express = require("express");
 const multer = require("multer");
@@ -20,54 +20,48 @@ const openai = new OpenAI({
 });
 
 const ASSISTANT_ID = process.env.ASSISTANT_ID;
-let cachedThreadId = null;
-let isRunInProgress = false;
+const threadCache = {}; // key: profile::theme => threadId
+const exerciseCache = {}; // key: profile::theme => { exerciseSetId, exercises }
+const lockMap = {}; // key: profile::theme => lock flag
 
-let cachedExerciseSet = {
-  exerciseSetId: null,
-  exercises: [],
-};
-
-let lastProfile = null;
-
-async function fetchExercises(profile) {
-  if (isRunInProgress) {
-    console.warn("⚠️ Run already in progress, skipping fetch.");
-    return cachedExerciseSet;
+async function fetchExercises(profile, theme) {
+  const cacheKey = `${profile}::${theme}`;
+  if (lockMap[cacheKey]) {
+    console.warn("⚠️ Run already in progress for", cacheKey);
+    return exerciseCache[cacheKey] || { exerciseSetId: null, exercises: [] };
   }
 
-  isRunInProgress = true;
+  lockMap[cacheKey] = true;
 
   try {
     if (!ASSISTANT_ID) throw new Error("Missing ASSISTANT_ID");
 
-    if (!cachedThreadId) {
+    if (!threadCache[cacheKey]) {
       const thread = await openai.beta.threads.create();
-      cachedThreadId = thread.id;
-      console.log("🧵 Created new thread:", cachedThreadId);
+      threadCache[cacheKey] = thread.id;
+      console.log("🧵 Created thread for", cacheKey);
     }
 
-    console.log("📨 Sending message to assistant for profile:", profile);
+    const prompt = `You are DizAí's assistant. The active profile is ${profile}. The user is currently training on the theme \"${theme}\". Return a full exercise set in strictly valid JSON format.`;
 
-    await openai.beta.threads.messages.create(cachedThreadId, {
+    await openai.beta.threads.messages.create(threadCache[cacheKey], {
       role: "user",
-      content: `You are DizAí's assistant. The active profile is ${profile}. Return a full exercise set in strict JSON format as previously agreed.`,
+      content: prompt,
     });
 
-    const run = await openai.beta.threads.runs.create(cachedThreadId, {
+    const run = await openai.beta.threads.runs.create(threadCache[cacheKey], {
       assistant_id: ASSISTANT_ID,
     });
 
     let runStatus;
     do {
       await new Promise((resolve) => setTimeout(resolve, 500));
-      runStatus = await openai.beta.threads.runs.retrieve(cachedThreadId, run.id);
+      runStatus = await openai.beta.threads.runs.retrieve(threadCache[cacheKey], run.id);
       console.log("⏳ Run status:", runStatus.status);
     } while (runStatus.status !== "completed");
 
-    const messages = await openai.beta.threads.messages.list(cachedThreadId);
+    const messages = await openai.beta.threads.messages.list(threadCache[cacheKey]);
     const last = messages.data.find((m) => m.role === "assistant");
-
     const content = last.content?.[0]?.text?.value?.trim();
     console.log("🧠 Raw assistant content:", content);
 
@@ -82,36 +76,27 @@ async function fetchExercises(profile) {
       return { exerciseSetId: null, exercises: [] };
     }
 
-    return {
+    exerciseCache[cacheKey] = {
       exerciseSetId: parsed.exerciseSetId,
       exercises: parsed.exercises,
     };
+    return exerciseCache[cacheKey];
   } catch (err) {
     console.error("🚫 Assistant fetch failed:", err.message);
     return { exerciseSetId: null, exercises: [] };
   } finally {
-    isRunInProgress = false;
+    lockMap[cacheKey] = false;
   }
 }
 
 app.get("/api/exercise_set", async (req, res) => {
   const profile = req.query.profile || "default";
-  console.log("📥 Incoming /exercise_set request. Profile:", profile);
+  const theme = req.query.theme || "everyday";
+  console.log("📥 Incoming /exercise_set request:", profile, theme);
 
-  if (profile !== lastProfile || !cachedExerciseSet.exerciseSetId) {
-    const { exerciseSetId, exercises } = await fetchExercises(profile);
-    if (exerciseSetId) {
-      cachedExerciseSet = { exerciseSetId, exercises };
-      lastProfile = profile;
-    } else {
-      console.warn("⚠️ Assistant returned empty or invalid exercise set.");
-    }
-  }
+  const { exerciseSetId, exercises } = await fetchExercises(profile, theme);
 
-  res.json({
-    exerciseSetId: cachedExerciseSet.exerciseSetId,
-    exercises: cachedExerciseSet.exercises,
-  });
+  res.json({ exerciseSetId, exercises });
 });
 
 app.post("/api/analyze", upload.single("audio"), async (req, res) => {
