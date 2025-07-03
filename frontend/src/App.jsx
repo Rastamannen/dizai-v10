@@ -161,4 +161,43 @@ export default function App() {
     <div className="dizai-app">
       <header>
         <img src={logoUrl} alt="DizAi logo" style={{ height: 48 }} />
-        <span style={{ fontSize: "2.2rem", fontWeight:
+        <span style={{ fontSize: "2.2rem", fontWeight: 800 }}>DizAí v1.1</span>
+        <input value={theme} onChange={handleThemeChange} onKeyDown={handleKeyDown} placeholder="Theme" />
+      </header>
+
+      <main>
+        <button onClick={() => setProfile(profile === "Johan" ? "Petra" : "Johan")}>
+          Switch to {profile === "Johan" ? "Petra" : "Johan"}
+        </button>
+
+        <h2>{exText}</h2>
+        <div>
+          {showIPA && <div>IPA: <strong>{exIPA}</strong></div>}
+          {showRespelling && <div>Respelling: <strong>{exRespelling}</strong></div>}
+          <label>
+            <input type="checkbox" checked={showIPA} onChange={() => setShowIPA(!showIPA)} /> Show IPA
+          </label>
+          <label>
+            <input type="checkbox" checked={showRespelling} onChange={() => setShowRespelling(!showRespelling)} /> Show respelling
+          </label>
+        </div>
+
+        {audioUrl && <audio controls src={audioUrl} />}
+
+        <div>
+          <button onClick={handleRecord} disabled={recording}>{recording ? "Recording..." : "🎤 Record"}</button>
+          {recording && <button onClick={handleStop}>Stop</button>}
+        </div>
+
+        <div>
+          <strong>Transcript:</strong> {transcript}
+        </div>
+        <div style={{ color: getFeedbackColor(feedback) }}>{feedback}</div>
+
+        <button onClick={handlePrev} disabled={exerciseIdx === 0}>Prev</button>
+        <button onClick={handleNext}>Next</button>
+        <button onClick={handleReload}>🔄 Load new questions</button>
+      </main>
+    </div>
+  );
+}
