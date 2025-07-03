@@ -42,7 +42,7 @@ async function fetchExercises(profile, theme) {
       console.log("🧵 Created thread for", cacheKey);
     }
 
-    const prompt = `You are DizAí's assistant. The active profile is ${profile}. The user is currently training on the theme \"${theme}\". Return a full exercise set in strictly valid JSON format.`;
+    const prompt = `Johan and Petra are learning European Portuguese together using DizAí. Johan is training on the theme "${theme}". Return a new exercise set in strict JSON format with a unique "exerciseSetId" starting with "${theme}-". Use European Portuguese only. Include IPA.`;
 
     await openai.beta.threads.messages.create(threadCache[cacheKey], {
       role: "user",
@@ -63,6 +63,7 @@ async function fetchExercises(profile, theme) {
     const messages = await openai.beta.threads.messages.list(threadCache[cacheKey]);
     const last = messages.data.find((m) => m.role === "assistant");
     const content = last.content?.[0]?.text?.value?.trim();
+
     console.log("🧠 Raw assistant content:", content);
 
     if (!content) throw new Error("No content in assistant response");
@@ -70,6 +71,9 @@ async function fetchExercises(profile, theme) {
     let parsed;
     try {
       parsed = JSON.parse(content);
+      if (!parsed.exerciseSetId || !parsed.exercises) {
+        throw new Error("Parsed JSON missing required fields");
+      }
       console.log("✅ Parsed exercise set:", parsed.exerciseSetId);
     } catch (err) {
       console.error("❌ JSON parse error from assistant:", content);
