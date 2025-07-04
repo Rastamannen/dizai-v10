@@ -1,4 +1,5 @@
-// server.cjs – DizAí v1.6.4 backend med GPT-logg, SQLite-lagring och undici-File
+// server.cjs – DizAí v1.6.4 backend med strikt JSON från GPT, fallback-parser och SQLite-logg
+
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
@@ -25,9 +26,11 @@ const ASSISTANT_ID = process.env.ASSISTANT_ID;
 const exerciseCache = {};
 const lockMap = {};
 
-function getFeedbackStatus(text) {
-  if (text.toLowerCase().includes("perfect")) return "perfect";
-  return "tryagain";
+function getFeedbackStatus(parsed) {
+  const devs = parsed?.deviations || [];
+  if (!devs.length) return "perfect";
+  if (devs.some(d => d.severity === "major")) return "tryagain";
+  return "almost";
 }
 
 app.get("/api/exercise_set", async (req, res) => {
@@ -75,25 +78,51 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
     console.log("➡️ User:", userTrans.text);
     console.log("✅ Ref:", refTrans.text);
 
-    const gptPrompt = `Compare the pronunciation in these two utterances of the European Portuguese phrase "${exercise.phrase}". One is a native reference, the other is the user's attempt. Do not rely solely on the transcription text. Even if they appear identical, assume the user may still have phonetic inaccuracies. Focus on differences in pronunciation. Highlight any phonetic issues (e.g. final 's' pronounced hard, wrong vowel quality, nasal errors, dropped syllables, rhythm, intonation, etc.). Return:
-- Native phrase
-- User's attempt
-- Word-level deviations with severity (minor/major) and short note
-Return a JSON object with fields: native, attempt, deviations.`;
+    const systemPrompt = {
+      role: "system",
+      content: `
+You are a backend API. Return only valid JSON responses that match this exact schema:
+
+{
+  "native": "string",
+  "attempt": "string",
+  "deviations": [
+    {
+      "word": "string",
+      "severity": "minor" | "major",
+      "note": "string"
+    }
+  ]
+}
+
+Never include explanations, markdown, or any formatting other than valid JSON.
+If the transcription is completely wrong, still return a valid JSON object with empty or guessed data.
+
+This is machine-to-machine communication.
+`.trim()
+    };
+
+    const userPrompt = {
+      role: "user",
+      content: `Compare the pronunciation of the European Portuguese phrase "${exercise.phrase}". One audio is native, the other is the user's attempt. Use these transcripts:
+
+User transcript:
+${userTrans.text}
+
+Reference transcript:
+${refTrans.text}`
+    };
 
     const chat = await openai.chat.completions.create({
       model: "gpt-4o",
-      messages: [
-        { role: "system", content: "You are a phonetic pronunciation expert for European Portuguese." },
-        { role: "user", content: gptPrompt },
-        { role: "user", content: `User transcript:\n${userTrans.text}\n\nReference transcript:\n${refTrans.text}` }
-      ]
+      messages: [systemPrompt, userPrompt],
+      response_format: "json",
+      temperature: 0.2
     });
 
-    const gptContent = chat.choices[0]?.message?.content || "{}";
-    const jsonMatch = gptContent.match(/```json\s*([\s\S]+?)\s*```/i) || gptContent.match(/{[\s\S]+}/);
-    const jsonString = jsonMatch ? jsonMatch[1] || jsonMatch[0] : null;
-    const parsed = JSON.parse(jsonString);
+    const parsed = chat.choices?.[0]?.message?.content
+      ? JSON.parse(chat.choices[0].message.content)
+      : { native: "", attempt: "", deviations: [] };
 
     const feedbackObject = {
       profile,
@@ -104,9 +133,9 @@ Return a JSON object with fields: native, attempt, deviations.`;
       phonetic: exercise.phonetic,
       userTranscript: userTrans.text,
       refTranscript: refTrans.text,
-      deviations: parsed.deviations,
+      deviations: parsed.deviations || [],
       feedback: parsed,
-      status: getFeedbackStatus(JSON.stringify(parsed)),
+      status: getFeedbackStatus(parsed),
       timestamp: new Date().toISOString(),
     };
 
@@ -120,7 +149,7 @@ Return a JSON object with fields: native, attempt, deviations.`;
     res.json({ transcript: userTrans.text, feedback: parsed });
   } catch (err) {
     console.error("❌ Analysis error:", err);
-    res.json({ transcript: "", feedback: "Error during analysis: " + err.message });
+    res.json({ transcript: "", feedback: { error: "Error during analysis: " + err.message } });
   }
 });
 
@@ -151,7 +180,7 @@ app.get("/api/tts", async (req, res) => {
 });
 
 (async () => {
-  await db.ensureInitialized(); // ⬅️ Skapar tabellen om den inte finns
+  await db.ensureInitialized();
   await threadManager.createGlobalLogThread(openai);
   app.listen(PORT, () => {
     console.log(`✅ DizAí backend listening on port ${PORT}`);
