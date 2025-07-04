@@ -73,7 +73,18 @@ function saveFeedback(entry) {
   });
 }
 
+// Ny generisk run()-metod för egen SQL-användning
+function run(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function (err) {
+      if (err) reject(err);
+      else resolve(this);
+    });
+  });
+}
+
 module.exports = {
   ensureInitialized,
   saveFeedback,
+  run,
 };
