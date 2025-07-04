@@ -1,4 +1,4 @@
-// server.cjs – DizAí v1.6 backend med integrerad threadManager och förbättrad logik
+// server.cjs – DizAí v1.6.1 backend med GPT-logg via /api/gptlog
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
@@ -106,11 +106,23 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
     };
 
     await threadManager.logFeedback(openai, ASSISTANT_ID, threadKey, feedbackObject);
+
+    // Skicka till GPT-logg via intern endpoint
+    await axios.post("http://localhost:" + PORT + "/api/gptlog", feedbackObject).catch((e) => {
+      console.warn("⚠️ Could not send GPT log:", e.message);
+    });
+
     res.json({ transcript: userTrans.text, feedback: parsed });
   } catch (err) {
     console.error("❌ Analysis error:", err);
     res.json({ transcript: "", feedback: "Error during analysis: " + err.message });
   }
+});
+
+app.post("/api/gptlog", async (req, res) => {
+  const feedback = req.body;
+  console.log("📡 GPT log received:", JSON.stringify(feedback, null, 2));
+  res.json({ status: "received" });
 });
 
 app.get("/api/tts", async (req, res) => {
