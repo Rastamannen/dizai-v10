@@ -1,4 +1,4 @@
-// server.cjs – DizAí v1.6.6 backend med fixat response_format för GPT-4o
+// server.cjs – DizAí v1.6.7 backend med GPT-4o fix, feedback-tabell och lokal loggning
 
 const express = require("express");
 const multer = require("multer");
@@ -176,6 +176,22 @@ app.get("/api/tts", async (req, res) => {
 
 (async () => {
   await db.ensureInitialized();
+  await db.run(`
+    CREATE TABLE IF NOT EXISTS feedback (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      profile TEXT,
+      exerciseSetId TEXT,
+      exerciseId TEXT,
+      phrase TEXT,
+      ipa TEXT,
+      phonetic TEXT,
+      userTranscript TEXT,
+      refTranscript TEXT,
+      status TEXT,
+      timestamp TEXT,
+      feedbackJson TEXT
+    );
+  `);
   await threadManager.createGlobalLogThread(openai);
   app.listen(PORT, () => {
     console.log(`✅ DizAí backend listening on port ${PORT}`);
