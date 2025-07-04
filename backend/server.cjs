@@ -1,4 +1,4 @@
-// server.cjs – DizAí v1.6.1 backend med GPT-logg via /api/gptlog
+// server.cjs – DizAí v1.6.2 backend med inbyggd File-klass och GPT-logg via /api/gptlog
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
@@ -6,7 +6,6 @@ const axios = require("axios");
 const morgan = require("morgan");
 const { OpenAI } = require("openai");
 const textToSpeech = require("@google-cloud/text-to-speech");
-const { File } = require("formdata-node");
 const threadManager = require("./threadManager");
 
 const app = express();
@@ -14,7 +13,7 @@ const upload = multer();
 const PORT = process.env.PORT || 10000;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "10mb" }));
 app.use(morgan("combined"));
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -23,6 +22,25 @@ const gcpTTSClient = new textToSpeech.TextToSpeechClient();
 const ASSISTANT_ID = process.env.ASSISTANT_ID;
 const exerciseCache = {};
 const lockMap = {};
+
+// Inbyggd ersättning för File från formdata-node
+class File {
+  constructor(buffer, name, options = {}) {
+    this.buffer = buffer;
+    this.name = name;
+    this.type = options.type || "application/octet-stream";
+  }
+  get [Symbol.toStringTag]() {
+    return "File";
+  }
+  async arrayBuffer() {
+    return this.buffer;
+  }
+  stream() {
+    const { Readable } = require("stream");
+    return Readable.from(this.buffer);
+  }
+}
 
 function getFeedbackStatus(text) {
   if (text.toLowerCase().includes("perfect")) return "perfect";
@@ -53,8 +71,8 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
     const refAudio = req.files?.ref?.[0]?.buffer;
     if (!userAudio || !refAudio) throw new Error("Both audio files required");
 
-    const userFile = new File([userAudio], "user.webm", { type: "audio/webm" });
-    const refFile = new File([refAudio], "ref.webm", { type: "audio/webm" });
+    const userFile = new File(userAudio, "user.webm", { type: "audio/webm" });
+    const refFile = new File(refAudio, "ref.webm", { type: "audio/webm" });
 
     const userTrans = await openai.audio.transcriptions.create({
       file: userFile,
@@ -107,7 +125,7 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
 
     await threadManager.logFeedback(openai, ASSISTANT_ID, threadKey, feedbackObject);
 
-    // Skicka till GPT-logg via intern endpoint
+    // Intern GPT-logg
     await axios.post("http://localhost:" + PORT + "/api/gptlog", feedbackObject).catch((e) => {
       console.warn("⚠️ Could not send GPT log:", e.message);
     });
