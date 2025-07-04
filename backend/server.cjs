@@ -1,3 +1,5 @@
+// server.cjs – DizAí v1.6.6 backend med fixat response_format för GPT-4o
+
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
@@ -80,7 +82,6 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
       role: "system",
       content: `
 You are a backend API. Return only valid JSON responses that match this exact schema:
-
 {
   "native": "string",
   "attempt": "string",
@@ -92,10 +93,8 @@ You are a backend API. Return only valid JSON responses that match this exact sc
     }
   ]
 }
-
 Never include explanations, markdown, or any formatting other than valid JSON.
 If the transcription is completely wrong, still return a valid JSON object with empty or guessed data.
-
 This is machine-to-machine communication.
 `.trim()
     };
@@ -103,10 +102,8 @@ This is machine-to-machine communication.
     const userPrompt = {
       role: "user",
       content: `Compare the pronunciation of the European Portuguese phrase "${exercise.phrase}". One audio is native, the other is the user's attempt. Use these transcripts:
-
 User transcript:
 ${userTrans.text}
-
 Reference transcript:
 ${refTrans.text}`
     };
@@ -114,7 +111,7 @@ ${refTrans.text}`
     const chat = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [systemPrompt, userPrompt],
-      response_format: { type: "json" },
+      response_format: { type: "json_object" },
       temperature: 0.2
     });
 
