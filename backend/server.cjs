@@ -1,4 +1,4 @@
-// server.cjs – DizAí v1.6.4 backend med strikt JSON från GPT, fallback-parser och SQLite-logg
+// server.cjs – DizAí v1.6.5 backend med strikt JSON från GPT, fallback-parser och SQLite-logg
 
 const express = require("express");
 const multer = require("multer");
