@@ -1,4 +1,4 @@
-// server.cjs – DizAí v1.6.3 backend med GPT-logg, SQLite-lagring och undici-File
+// server.cjs – DizAí v1.6.4 backend med GPT-logg, SQLite-lagring och undici-File
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
@@ -111,11 +111,8 @@ Return a JSON object with fields: native, attempt, deviations.`;
     };
 
     await threadManager.logFeedback(openai, ASSISTANT_ID, threadKey, feedbackObject);
-
-    // 📡 Spara till lokal logg (DB)
     await db.saveFeedback(feedbackObject);
 
-    // 🧠 Skicka intern GPT-logg
     await axios.post("http://localhost:" + PORT + "/api/gptlog", feedbackObject).catch((e) => {
       console.warn("⚠️ Could not send GPT log:", e.message);
     });
@@ -153,8 +150,10 @@ app.get("/api/tts", async (req, res) => {
   }
 });
 
-threadManager.createGlobalLogThread(openai).then(() => {
+(async () => {
+  await db.ensureInitialized(); // ⬅️ Skapar tabellen om den inte finns
+  await threadManager.createGlobalLogThread(openai);
   app.listen(PORT, () => {
     console.log(`✅ DizAí backend listening on port ${PORT}`);
   });
-});
+})();
