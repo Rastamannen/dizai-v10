@@ -1,4 +1,4 @@
-// server.cjs – DizAí v1.5.2 backend med förbättrad fonetisk analys och robust fallback
+// server.cjs – DizAí v1.6 backend med integrerad threadManager och förbättrad logik
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
@@ -7,6 +7,7 @@ const morgan = require("morgan");
 const { OpenAI } = require("openai");
 const textToSpeech = require("@google-cloud/text-to-speech");
 const { File } = require("formdata-node");
+const threadManager = require("./threadManager");
 
 const app = express();
 const upload = multer();
@@ -21,78 +22,23 @@ const gcpTTSClient = new textToSpeech.TextToSpeechClient();
 
 const ASSISTANT_ID = process.env.ASSISTANT_ID;
 const exerciseCache = {};
-const threadCache = {};
 const lockMap = {};
-let globalLogThreadId = null;
 
 function getFeedbackStatus(text) {
   if (text.toLowerCase().includes("perfect")) return "perfect";
   return "tryagain";
 }
 
-async function createGlobalLogThread() {
-  if (globalLogThreadId) return;
-  try {
-    const thread = await openai.beta.threads.create();
-    globalLogThreadId = thread.id;
-    console.log("🧾 Global log thread created:", globalLogThreadId);
-  } catch (err) {
-    console.error("❌ Failed to create global log thread:", err);
-  }
-}
-
-async function fetchExercises(profile, theme) {
-  const cacheKey = `${profile}::${theme}`;
-  if (lockMap[cacheKey]) return exerciseCache[cacheKey] || { exerciseSetId: null, exercises: [] };
-  lockMap[cacheKey] = true;
-  try {
-    const thread = await openai.beta.threads.create();
-    threadCache[cacheKey] = thread.id;
-
-    const prompt = `Johan and Petra are learning European Portuguese together using DizAí. Johan is training on the theme "${theme}". Return a new exercise set in strict JSON format with a unique "exerciseSetId" starting with "${theme}-". Use European Portuguese only. Include IPA and a user-friendly phonetic spelling. Avoid generic topics. Each exercise must have a unique "exerciseId".`;
-
-    await openai.beta.threads.messages.create(thread.id, { role: "user", content: prompt });
-    const run = await openai.beta.threads.runs.create(thread.id, { assistant_id: ASSISTANT_ID });
-
-    let runStatus;
-    do {
-      await new Promise(res => setTimeout(res, 500));
-      runStatus = await openai.beta.threads.runs.retrieve(thread.id, run.id);
-    } while (runStatus.status !== "completed");
-
-    const messages = await openai.beta.threads.messages.list(thread.id);
-    const last = messages.data.find(m => m.role === "assistant");
-    const content = last.content?.[0]?.text?.value?.trim();
-
-    const jsonMatch = content.match(/```json\s*([\s\S]+?)\s*```/i) || content.match(/{[\s\S]+}/);
-    const jsonString = jsonMatch ? jsonMatch[1] || jsonMatch[0] : null;
-    const parsed = JSON.parse(jsonString);
-
-    parsed.exercises = parsed.exercises.map((ex, i) => ({
-      ...ex,
-      exerciseId: ex.exerciseId?.trim() || `${parsed.exerciseSetId}--${i}`,
-    }));
-
-    exerciseCache[cacheKey] = { exerciseSetId: parsed.exerciseSetId, exercises: parsed.exercises };
-    return exerciseCache[cacheKey];
-  } catch (err) {
-    console.error("🚫 Fetch failed:", err);
-    return { exerciseSetId: null, exercises: [] };
-  } finally {
-    lockMap[cacheKey] = false;
-  }
-}
-
 app.get("/api/exercise_set", async (req, res) => {
   const profile = req.query.profile || "default";
   const theme = req.query.theme || "everyday";
-  const result = await fetchExercises(profile, theme);
+  const result = await threadManager.fetchExercises(openai, ASSISTANT_ID, profile, theme, exerciseCache, lockMap);
   res.json(result);
 });
 
 app.post("/api/exercise_set", async (req, res) => {
   const { profile = "default", theme = "everyday" } = req.body;
-  const result = await fetchExercises(profile, theme);
+  const result = await threadManager.fetchExercises(openai, ASSISTANT_ID, profile, theme, exerciseCache, lockMap);
   res.json(result);
 });
 
@@ -128,11 +74,7 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
     console.log("➡️ User:", userTrans.text);
     console.log("✅ Ref:", refTrans.text);
 
-    const gptPrompt = `Compare the pronunciation in these two utterances of the European Portuguese phrase "${exercise.phrase}". One is a native reference, the other is the user's attempt. Do not rely solely on the transcription text. Even if they appear identical, assume the user may still have phonetic inaccuracies. Focus on differences in pronunciation. Highlight any phonetic issues (e.g. final 's' pronounced hard, wrong vowel quality, nasal errors, dropped syllables, rhythm, intonation, etc.). Return:
-- Native phrase
-- User's attempt
-- Word-level deviations with severity (minor/major) and short note
-Return a JSON object with fields: native, attempt, deviations.`;
+    const gptPrompt = `Compare the pronunciation in these two utterances of the European Portuguese phrase "${exercise.phrase}". One is a native reference, the other is the user's attempt. Do not rely solely on the transcription text. Even if they appear identical, assume the user may still have phonetic inaccuracies. Focus on differences in pronunciation. Highlight any phonetic issues (e.g. final 's' pronounced hard, wrong vowel quality, nasal errors, dropped syllables, rhythm, intonation, etc.). Return:\n- Native phrase\n- User's attempt\n- Word-level deviations with severity (minor/major) and short note\nReturn a JSON object with fields: native, attempt, deviations.`;
 
     const chat = await openai.chat.completions.create({
       model: "gpt-4o",
@@ -163,20 +105,7 @@ Return a JSON object with fields: native, attempt, deviations.`;
       timestamp: new Date().toISOString(),
     };
 
-    const threadId = threadCache[threadKey];
-    if (threadId && ASSISTANT_ID) {
-      await openai.beta.threads.messages.create(threadId, {
-        role: "user",
-        content: `Feedback for ${profile} on exerciseId ${exerciseId} in set ${exerciseSetId}:\n${JSON.stringify(feedbackObject, null, 2)}`
-      });
-      if (globalLogThreadId) {
-        await openai.beta.threads.messages.create(globalLogThreadId, {
-          role: "user",
-          content: `LOG ENTRY:\n${JSON.stringify(feedbackObject, null, 2)}`
-        });
-      }
-    }
-
+    await threadManager.logFeedback(openai, ASSISTANT_ID, threadKey, feedbackObject);
     res.json({ transcript: userTrans.text, feedback: parsed });
   } catch (err) {
     console.error("❌ Analysis error:", err);
@@ -204,8 +133,8 @@ app.get("/api/tts", async (req, res) => {
   }
 });
 
-createGlobalLogThread();
-
-app.listen(PORT, () => {
-  console.log(`✅ DizAí backend listening on port ${PORT}`);
+threadManager.createGlobalLogThread(openai).then(() => {
+  app.listen(PORT, () => {
+    console.log(`✅ DizAí backend listening on port ${PORT}`);
+  });
 });
