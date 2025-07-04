@@ -1,4 +1,4 @@
-// server.cjs – DizAí v1.6.3 backend med GPT-logg, förbättrad File-hantering via undici
+// server.cjs – DizAí v1.6.3 backend med GPT-logg, SQLite-lagring och undici-File
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
@@ -8,6 +8,7 @@ const { OpenAI } = require("openai");
 const textToSpeech = require("@google-cloud/text-to-speech");
 const { File } = require("undici");
 const threadManager = require("./threadManager");
+const db = require("./db");
 
 const app = express();
 const upload = multer();
@@ -111,6 +112,10 @@ Return a JSON object with fields: native, attempt, deviations.`;
 
     await threadManager.logFeedback(openai, ASSISTANT_ID, threadKey, feedbackObject);
 
+    // 📡 Spara till lokal logg (DB)
+    await db.saveFeedback(feedbackObject);
+
+    // 🧠 Skicka intern GPT-logg
     await axios.post("http://localhost:" + PORT + "/api/gptlog", feedbackObject).catch((e) => {
       console.warn("⚠️ Could not send GPT log:", e.message);
     });
