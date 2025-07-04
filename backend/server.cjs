@@ -1,4 +1,4 @@
-// server.cjs – DizAí v1.6.2 backend med inbyggd File-klass och GPT-logg via /api/gptlog
+// server.cjs – DizAí v1.6.3 backend med GPT-logg, förbättrad File-hantering via undici
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
@@ -6,6 +6,7 @@ const axios = require("axios");
 const morgan = require("morgan");
 const { OpenAI } = require("openai");
 const textToSpeech = require("@google-cloud/text-to-speech");
+const { File } = require("undici");
 const threadManager = require("./threadManager");
 
 const app = express();
@@ -22,25 +23,6 @@ const gcpTTSClient = new textToSpeech.TextToSpeechClient();
 const ASSISTANT_ID = process.env.ASSISTANT_ID;
 const exerciseCache = {};
 const lockMap = {};
-
-// Inbyggd ersättning för File från formdata-node
-class File {
-  constructor(buffer, name, options = {}) {
-    this.buffer = buffer;
-    this.name = name;
-    this.type = options.type || "application/octet-stream";
-  }
-  get [Symbol.toStringTag]() {
-    return "File";
-  }
-  async arrayBuffer() {
-    return this.buffer;
-  }
-  stream() {
-    const { Readable } = require("stream");
-    return Readable.from(this.buffer);
-  }
-}
 
 function getFeedbackStatus(text) {
   if (text.toLowerCase().includes("perfect")) return "perfect";
@@ -71,8 +53,8 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
     const refAudio = req.files?.ref?.[0]?.buffer;
     if (!userAudio || !refAudio) throw new Error("Both audio files required");
 
-    const userFile = new File(userAudio, "user.webm", { type: "audio/webm" });
-    const refFile = new File(refAudio, "ref.webm", { type: "audio/webm" });
+    const userFile = new File([userAudio], "user.webm", { type: "audio/webm" });
+    const refFile = new File([refAudio], "ref.webm", { type: "audio/webm" });
 
     const userTrans = await openai.audio.transcriptions.create({
       file: userFile,
@@ -92,7 +74,11 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
     console.log("➡️ User:", userTrans.text);
     console.log("✅ Ref:", refTrans.text);
 
-    const gptPrompt = `Compare the pronunciation in these two utterances of the European Portuguese phrase "${exercise.phrase}". One is a native reference, the other is the user's attempt. Do not rely solely on the transcription text. Even if they appear identical, assume the user may still have phonetic inaccuracies. Focus on differences in pronunciation. Highlight any phonetic issues (e.g. final 's' pronounced hard, wrong vowel quality, nasal errors, dropped syllables, rhythm, intonation, etc.). Return:\n- Native phrase\n- User's attempt\n- Word-level deviations with severity (minor/major) and short note\nReturn a JSON object with fields: native, attempt, deviations.`;
+    const gptPrompt = `Compare the pronunciation in these two utterances of the European Portuguese phrase "${exercise.phrase}". One is a native reference, the other is the user's attempt. Do not rely solely on the transcription text. Even if they appear identical, assume the user may still have phonetic inaccuracies. Focus on differences in pronunciation. Highlight any phonetic issues (e.g. final 's' pronounced hard, wrong vowel quality, nasal errors, dropped syllables, rhythm, intonation, etc.). Return:
+- Native phrase
+- User's attempt
+- Word-level deviations with severity (minor/major) and short note
+Return a JSON object with fields: native, attempt, deviations.`;
 
     const chat = await openai.chat.completions.create({
       model: "gpt-4o",
@@ -125,7 +111,6 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
 
     await threadManager.logFeedback(openai, ASSISTANT_ID, threadKey, feedbackObject);
 
-    // Intern GPT-logg
     await axios.post("http://localhost:" + PORT + "/api/gptlog", feedbackObject).catch((e) => {
       console.warn("⚠️ Could not send GPT log:", e.message);
     });
