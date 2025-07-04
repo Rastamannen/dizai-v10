@@ -1,5 +1,3 @@
-// server.cjs – DizAí v1.6.5 backend med strikt JSON från GPT, fallback-parser och SQLite-logg
-
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
@@ -116,7 +114,7 @@ ${refTrans.text}`
     const chat = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [systemPrompt, userPrompt],
-      response_format: "json",
+      response_format: { type: "json" },
       temperature: 0.2
     });
 
