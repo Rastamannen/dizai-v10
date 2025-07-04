@@ -1,4 +1,4 @@
-// App.jsx – DizAí v1.5 (full feedback loop, phonetic UX, profile-aware)
+// App.jsx – DizAí v1.6 (safe feedback parsing)
 
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
@@ -113,8 +113,15 @@ export default function App() {
 
         try {
           const resp = await axios.post(`${API_URL}/api/analyze`, formData);
+          let rawFeedback = resp.data.feedback;
+          if (rawFeedback && rawFeedback.deviations && !Array.isArray(rawFeedback.deviations)) {
+            rawFeedback.deviations = Object.entries(rawFeedback.deviations).map(([word, data]) => ({
+              word,
+              ...data
+            }));
+          }
           setTranscript(resp.data.transcript);
-          setFeedback(resp.data.feedback);
+          setFeedback(rawFeedback);
         } catch (err) {
           console.error("❌ Analyze error", err);
           setFeedback({ error: "Error during analysis." });
@@ -174,7 +181,7 @@ export default function App() {
     <div className="dizai-app">
       <header>
         <img src={logoUrl} alt="DizAi logo" style={{ height: 48 }} />
-        <span style={{ fontSize: "2.2rem", fontWeight: 800 }}>DizAí v1.5</span>
+        <span style={{ fontSize: "2.2rem", fontWeight: 800 }}>DizAí v1.6</span>
         <input value={theme} onChange={handleThemeChange} onKeyDown={handleKeyDown} placeholder="Theme" />
       </header>
 
