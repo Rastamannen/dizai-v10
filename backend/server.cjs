@@ -121,7 +121,11 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
     await threadManager.logFeedback(openai, ASSISTANT_ID, threadKey, feedbackObject);
 
     if (ENABLE_GPT_LOG) {
-      await threadManager.logFeedbackToGlobalThread(openai, feedbackObject);
+      try {
+        await threadManager.logFeedbackToGlobalThread(openai, feedbackObject);
+      } catch (e) {
+        console.warn("⚠️ Failed to log feedback to GPT:", e.message);
+      }
     }
 
     await db.saveFeedback(feedbackObject);
@@ -161,7 +165,7 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
     });
 
     await axios.post("http://localhost:" + PORT + "/api/gptlog", feedbackObject).catch((e) => {
-      console.warn("⚠️ Could not send GPT log:", e.message);
+      console.warn("⚠️ Could not send GPT log to local endpoint:", e.message);
     });
 
     res.json({ transcript: userTrans.text, feedback: parsed });
