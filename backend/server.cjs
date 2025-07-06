@@ -1,4 +1,4 @@
-// server.js – uppdaterad med ENABLE_GPT_LOG-styrning
+// server.js – DizAí backend med GPT-loggstyrning via ENABLE_GPT_LOG
 
 const express = require("express");
 const multer = require("multer");
@@ -24,6 +24,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const gcpTTSClient = new textToSpeech.TextToSpeechClient();
 
 const ASSISTANT_ID = process.env.ASSISTANT_ID;
+const ENABLE_GPT_LOG = process.env.ENABLE_GPT_LOG === "true";
 const exerciseCache = {};
 const lockMap = {};
 
@@ -119,7 +120,7 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
 
     await threadManager.logFeedback(openai, ASSISTANT_ID, threadKey, feedbackObject);
 
-    if (process.env.ENABLE_GPT_LOG === "true") {
+    if (ENABLE_GPT_LOG) {
       await threadManager.logFeedbackToGlobalThread(openai, feedbackObject);
     }
 
