@@ -1,3 +1,5 @@
+// server.js – uppdaterad med ENABLE_GPT_LOG-styrning
+
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
@@ -77,9 +79,8 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
     console.log("➡️ User:", userTrans.text);
     console.log("✅ Ref:", refTrans.text);
 
-    // 🧠 Dynamiskt genererad prompt
     const { systemPrompt, userPrompt } = generatePrompt({
-      stepType: "repeat", // just nu hårdkodat tills fler typer hanteras
+      stepType: "repeat",
       exercise,
       transcripts: {
         user: userTrans.text,
@@ -117,7 +118,11 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
     };
 
     await threadManager.logFeedback(openai, ASSISTANT_ID, threadKey, feedbackObject);
-    await threadManager.logFeedbackToGlobalThread(openai, feedbackObject);
+
+    if (process.env.ENABLE_GPT_LOG === "true") {
+      await threadManager.logFeedbackToGlobalThread(openai, feedbackObject);
+    }
+
     await db.saveFeedback(feedbackObject);
 
     await db.saveInteraction({
