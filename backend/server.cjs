@@ -9,8 +9,6 @@ const { OpenAI } = require("openai");
 const textToSpeech = require("@google-cloud/text-to-speech");
 const { File } = require("undici");
 const threadManager = require("./threadManager");
-const db = require("./db");
-const { generatePrompt } = require("./promptGenerator");
 
 const app = express();
 const upload = multer();
@@ -79,7 +77,7 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
     console.log("➡️ User:", userTrans.text);
     console.log("✅ Ref:", refTrans.text);
 
-    const { systemPrompt, userPrompt } = generatePrompt({
+    const { systemPrompt, userPrompt } = require("./promptGenerator").generatePrompt({
       stepType: "repeat",
       exercise,
       transcripts: {
@@ -119,41 +117,6 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
 
     await threadManager.logFeedback(openai, ASSISTANT_ID, threadKey, feedbackObject);
     await threadManager.logFeedbackToGlobalThread(openai, feedbackObject);
-    await db.saveFeedback(feedbackObject);
-
-    await db.saveInteraction({
-      profile,
-      scenarioId: exerciseSetId,
-      exerciseSetId,
-      exerciseId,
-      stepId: exerciseId,
-      role: "user",
-      stepType: "repeat",
-      prompt: exercise.phrase,
-      userInput: userTrans.text,
-      refResponse: refTrans.text,
-      ipa: exercise.ipa,
-      phonetic: exercise.phonetic,
-      feedbackType: "pronunciation",
-      feedback: parsed,
-      deviations: parsed.deviations || [],
-      status: getFeedbackStatus(parsed),
-      timestamp: new Date().toISOString()
-    });
-
-    db.appendToJsonl(profile, exerciseSetId, {
-      timestamp: new Date().toISOString(),
-      profile,
-      exerciseSetId,
-      exerciseId,
-      phrase: exercise.phrase,
-      ipa: exercise.ipa,
-      phonetic: exercise.phonetic,
-      userTranscript: userTrans.text,
-      refTranscript: refTrans.text,
-      feedback: parsed,
-      status: getFeedbackStatus(parsed)
-    });
 
     res.json({ transcript: userTrans.text, feedback: parsed });
   } catch (err) {
@@ -189,23 +152,6 @@ app.get("/api/tts", async (req, res) => {
 });
 
 (async () => {
-  await db.ensureInitialized();
-  await db.run(`
-    CREATE TABLE IF NOT EXISTS feedback (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      profile TEXT,
-      exerciseSetId TEXT,
-      exerciseId TEXT,
-      phrase TEXT,
-      ipa TEXT,
-      phonetic TEXT,
-      userTranscript TEXT,
-      refTranscript TEXT,
-      status TEXT,
-      timestamp TEXT,
-      feedbackJson TEXT
-    );
-  `);
   await threadManager.createGlobalLogThread(openai);
   app.listen(PORT, () => {
     console.log(`✅ DizAí backend listening on port ${PORT}`);
