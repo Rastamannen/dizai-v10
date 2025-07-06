@@ -1,4 +1,5 @@
-// threadManager.js – DizAí v1.7 thread + persistent GPT-loggning
+// threadManager.js – DizAí v1.8 thread + persistent GPT-loggning
+
 let globalLogThreadId = null;
 const threadCache = {};
 const userFeedbackLogs = {};
@@ -55,7 +56,7 @@ async function fetchExercises(openai, assistantId, profile, theme, exerciseCache
   }
 }
 
-// Loggar feedback till personlig + global GPT-tråd (för interaktiv dialog)
+// Loggar feedback till personlig + global GPT-tråd (interaktivt syfte)
 async function logFeedback(openai, assistantId, threadKey, feedback) {
   const { profile } = feedback;
   userFeedbackLogs[profile] = userFeedbackLogs[profile] || [];
@@ -64,21 +65,25 @@ async function logFeedback(openai, assistantId, threadKey, feedback) {
   const logEntry = `LOG ENTRY:\n${JSON.stringify(feedback, null, 2)}`;
   const threadId = threadCache[threadKey];
 
-  if (threadId) {
-    await openai.beta.threads.messages.create(threadId, { role: "user", content: logEntry });
-  }
+  try {
+    if (threadId) {
+      await openai.beta.threads.messages.create(threadId, { role: "user", content: logEntry });
+    }
 
-  if (globalLogThreadId) {
-    await openai.beta.threads.messages.create(globalLogThreadId, { role: "user", content: logEntry });
+    if (globalLogThreadId) {
+      await openai.beta.threads.messages.create(globalLogThreadId, { role: "user", content: logEntry });
+    }
+  } catch (err) {
+    console.warn("⚠️ Could not push verbose log to GPT threads:", err.message);
   }
 }
 
-// 🔥 NYTT: Skriver en strikt JSON-logg direkt till GPT:s globala tråd
+// 🔥 NYTT: Strukturerad JSON-logg till GPT:s globala tråd
 async function logFeedbackToGlobalThread(openai, feedback) {
   if (!globalLogThreadId) return;
 
   const structured = {
-    type: "exercise_feedback",
+    type: "exercise_feedback_v1",
     profile: feedback.profile,
     exerciseSetId: feedback.exerciseSetId,
     exerciseId: feedback.exerciseId,
@@ -93,13 +98,17 @@ async function logFeedbackToGlobalThread(openai, feedback) {
     timestamp: feedback.timestamp
   };
 
-  await openai.beta.threads.messages.create(globalLogThreadId, {
-    role: "user",
-    content: `FEEDBACK_LOG:\n${JSON.stringify(structured)}`
-  });
+  try {
+    await openai.beta.threads.messages.create(globalLogThreadId, {
+      role: "user",
+      content: `FEEDBACK_LOG:\n${JSON.stringify(structured)}`
+    });
+  } catch (err) {
+    console.warn("⚠️ Could not send structured log to GPT global thread:", err.message);
+  }
 }
 
-// Hämtar all feedback för en profil från lokal cache (debug/dev)
+// Hämtar lokal cache för feedbacklogg (används för dev/debug)
 function getUserFeedbackLogs(profile) {
   return userFeedbackLogs[profile] || [];
 }
