@@ -8,6 +8,7 @@ const textToSpeech = require("@google-cloud/text-to-speech");
 const { File } = require("undici");
 const threadManager = require("./threadManager");
 const db = require("./db");
+const { generatePrompt } = require("./promptGenerator");
 
 const app = express();
 const upload = multer();
@@ -76,39 +77,22 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
     console.log("➡️ User:", userTrans.text);
     console.log("✅ Ref:", refTrans.text);
 
-    const systemPrompt = {
-      role: "system",
-      content: `
-You are a backend API. Return only valid JSON responses that match this exact schema:
-{
-  "native": "string",
-  "attempt": "string",
-  "deviations": [
-    {
-      "word": "string",
-      "severity": "minor" | "major",
-      "note": "string"
-    }
-  ]
-}
-Never include explanations, markdown, or any formatting other than valid JSON.
-If the transcription is completely wrong, still return a valid JSON object with empty or guessed data.
-This is machine-to-machine communication.
-`.trim()
-    };
-
-    const userPrompt = {
-      role: "user",
-      content: `Compare the pronunciation of the European Portuguese phrase "${exercise.phrase}". One audio is native, the other is the user's attempt. Use these transcripts:
-User transcript:
-${userTrans.text}
-Reference transcript:
-${refTrans.text}`
-    };
+    // 🧠 Dynamiskt genererad prompt
+    const { systemPrompt, userPrompt } = generatePrompt({
+      stepType: "repeat", // just nu hårdkodat tills fler typer hanteras
+      exercise,
+      transcripts: {
+        user: userTrans.text,
+        ref: refTrans.text
+      }
+    });
 
     const chat = await openai.chat.completions.create({
       model: "gpt-4o",
-      messages: [systemPrompt, userPrompt],
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt }
+      ],
       response_format: { type: "json_object" },
       temperature: 0.2
     });
