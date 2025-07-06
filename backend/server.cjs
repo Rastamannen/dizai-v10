@@ -1,4 +1,4 @@
-// server.js – DizAí backend v1.9 med GPT-loggning och strukturerad feedbackanalys
+// server.js – DizAí backend v1.9 utan ENABLE_GPT_LOG, alltid GPT-loggning
 
 const express = require("express");
 const multer = require("multer");
