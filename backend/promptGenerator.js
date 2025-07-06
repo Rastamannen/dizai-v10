@@ -1,10 +1,10 @@
-// promptGenerator.js – Genererar situationsanpassade GPT-promptar
+// promptGenerator.js – Genererar situationsanpassade GPT-promptar för DizAí
 
 function escape(text) {
   return String(text || "").replace(/\s+/g, " ").trim();
 }
 
-function generatePrompt({ stepType, exercise, transcripts }) {
+function generatePrompt({ stepType, exercise, transcripts, profile = "default" }) {
   const phrase = escape(exercise.phrase);
   const ipa = escape(exercise.ipa);
   const phonetic = escape(exercise.phonetic);
@@ -13,52 +13,88 @@ function generatePrompt({ stepType, exercise, transcripts }) {
 
   switch (stepType) {
     case "repeat":
-    default:
       return {
         systemPrompt: `
 You are a pronunciation analysis engine for European Portuguese.
-You will receive:
-- the native phrase
-- the user's transcription
-- the reference transcription
+Your task is to analyze how well a user pronounces a given phrase.
 
-You must return only valid JSON, in the following format:
+Return ONLY valid JSON in this format:
 {
-  "native": "string",                  // the reference phrase
-  "attempt": "string",                 // what the user said
+  "native": "string",
+  "attempt": "string",
   "deviations": [
     {
-      "word": "string",               // the word where there's a problem
-      "severity": "minor"|"major",   // how severe the issue is
-      "note": "string"               // explanation of the deviation
+      "word": "string",
+      "severity": "minor"|"major",
+      "note": "string"
     }
   ]
 }
 
-Rules:
-- Match the user's words with the reference phrase.
-- Flag incorrect pronunciation, missing words, or phonetic replacements.
-- Never return markdown, text, or formatting outside JSON.
-- If the user transcript is nonsense or very short, still return valid JSON.
-- Never guess – explain clearly what is wrong.
-
-You are not a chatbot. You are a strict pronunciation API.
+Guidelines:
+- Compare the user's attempt to the original phrase and IPA.
+- Identify missing, mispronounced or replaced phonemes.
+- Always return valid JSON even if the input is nonsense.
+- Do NOT explain, justify or wrap in markdown.
 `.trim(),
 
         userPrompt: `
-Analyze this European Portuguese pronunciation.
+Analyze this pronunciation attempt.
 
 Phrase: ${phrase}
 IPA: ${ipa}
-Phonetic guide: ${phonetic}
+Phonetic: ${phonetic}
 
 User said:
 ${userTranscript}
 
-Reference transcription:
+Reference transcript:
 ${refTranscript}
 `.trim()
       };
+
+    case "translate":
+      return {
+        systemPrompt: `
+You are a grammar and translation evaluator for learners of European Portuguese.
+Your task is to assess the quality of a user's translation attempt from English to Portuguese.
+
+Return ONLY valid JSON in this format:
+{
+  "reference": "string",             // the correct translation
+  "attempt": "string",              // what the user wrote
+  "errors": [
+    {
+      "word": "string",
+      "type": "grammar"|"vocabulary"|"omission"|"word_order",
+      "note": "string"
+    }
+  ]
+}
+
+Guidelines:
+- Focus on grammatical accuracy and vocabulary usage.
+- Highlight incorrect verb forms, missing words, or wrong word choices.
+- Don't return any explanation outside the JSON structure.
+- Be strict but helpful.
+`.trim(),
+
+        userPrompt: `
+Evaluate this translation attempt.
+
+English sentence:
+${exercise.translation}
+
+Correct Portuguese:
+${phrase}
+
+User attempt:
+${userTranscript}
+`.trim()
+      };
+
+    default:
+      throw new Error("Unsupported stepType: " + stepType);
   }
 }
 
