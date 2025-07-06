@@ -8,8 +8,8 @@ function generatePrompt({ stepType, exercise, transcripts, profile = "default" }
   const phrase = escape(exercise.phrase);
   const ipa = escape(exercise.ipa);
   const phonetic = escape(exercise.phonetic);
-  const userTranscript = escape(transcripts.user);
-  const refTranscript = escape(transcripts.ref);
+  const userTranscript = escape(transcripts?.user || "");
+  const refTranscript = escape(transcripts?.ref || "");
 
   switch (stepType) {
     case "repeat":
@@ -61,8 +61,8 @@ Your task is to assess the quality of a user's translation attempt from English 
 
 Return ONLY valid JSON in this format:
 {
-  "reference": "string",             // the correct translation
-  "attempt": "string",              // what the user wrote
+  "reference": "string",
+  "attempt": "string",
   "errors": [
     {
       "word": "string",
