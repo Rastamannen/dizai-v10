@@ -1,8 +1,9 @@
-// threadManager.js – DizAí v1.6.1 thread + feedback manager
+// threadManager.js – DizAí v1.7 thread + persistent GPT-loggning
 let globalLogThreadId = null;
 const threadCache = {};
 const userFeedbackLogs = {};
 
+// Initierar global GPT-loggtråd
 async function createGlobalLogThread(openai) {
   if (globalLogThreadId) return;
   const thread = await openai.beta.threads.create();
@@ -10,10 +11,12 @@ async function createGlobalLogThread(openai) {
   console.log("🧾 Global log thread created:", globalLogThreadId);
 }
 
+// Hämtar övningsset från GPT baserat på tema + profil
 async function fetchExercises(openai, assistantId, profile, theme, exerciseCache, lockMap) {
   const cacheKey = `${profile}::${theme}`;
   if (lockMap[cacheKey]) return exerciseCache[cacheKey] || { exerciseSetId: null, exercises: [] };
   lockMap[cacheKey] = true;
+
   try {
     const thread = await openai.beta.threads.create();
     threadCache[cacheKey] = thread.id;
@@ -52,6 +55,7 @@ async function fetchExercises(openai, assistantId, profile, theme, exerciseCache
   }
 }
 
+// Loggar feedback till personlig + global GPT-tråd (för interaktiv dialog)
 async function logFeedback(openai, assistantId, threadKey, feedback) {
   const { profile } = feedback;
   userFeedbackLogs[profile] = userFeedbackLogs[profile] || [];
@@ -59,14 +63,43 @@ async function logFeedback(openai, assistantId, threadKey, feedback) {
 
   const logEntry = `LOG ENTRY:\n${JSON.stringify(feedback, null, 2)}`;
   const threadId = threadCache[threadKey];
+
   if (threadId) {
     await openai.beta.threads.messages.create(threadId, { role: "user", content: logEntry });
   }
+
   if (globalLogThreadId) {
     await openai.beta.threads.messages.create(globalLogThreadId, { role: "user", content: logEntry });
   }
 }
 
+// 🔥 NYTT: Skriver en strikt JSON-logg direkt till GPT:s globala tråd
+async function logFeedbackToGlobalThread(openai, feedback) {
+  if (!globalLogThreadId) return;
+
+  const structured = {
+    type: "exercise_feedback",
+    profile: feedback.profile,
+    exerciseSetId: feedback.exerciseSetId,
+    exerciseId: feedback.exerciseId,
+    phrase: feedback.phrase,
+    ipa: feedback.ipa,
+    phonetic: feedback.phonetic,
+    userTranscript: feedback.userTranscript,
+    refTranscript: feedback.refTranscript,
+    feedbackType: "pronunciation",
+    deviations: feedback.deviations || [],
+    status: feedback.status,
+    timestamp: feedback.timestamp
+  };
+
+  await openai.beta.threads.messages.create(globalLogThreadId, {
+    role: "user",
+    content: `FEEDBACK_LOG:\n${JSON.stringify(structured)}`
+  });
+}
+
+// Hämtar all feedback för en profil från lokal cache (debug/dev)
 function getUserFeedbackLogs(profile) {
   return userFeedbackLogs[profile] || [];
 }
@@ -75,5 +108,6 @@ module.exports = {
   createGlobalLogThread,
   fetchExercises,
   logFeedback,
+  logFeedbackToGlobalThread,
   getUserFeedbackLogs
 };
