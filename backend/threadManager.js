@@ -1,8 +1,9 @@
-// threadManager.js – DizAí v1.8 thread + persistent GPT-loggning
+// threadManager.js – DizAí v1.9 thread + persistent GPT-loggning + verifiering
 
 let globalLogThreadId = null;
 const threadCache = {};
 const userFeedbackLogs = {};
+const gptGlobalLogs = {}; // 🔍 Ny struktur för verifierbar logg
 
 // Initierar global GPT-loggtråd
 async function createGlobalLogThread(openai) {
@@ -78,7 +79,7 @@ async function logFeedback(openai, assistantId, threadKey, feedback) {
   }
 }
 
-// 🔥 NYTT: Strukturerad JSON-logg till GPT:s globala tråd
+// 🔥 Skriver strukturerad logg till GPT:s globala tråd + intern verifieringsstruktur
 async function logFeedbackToGlobalThread(openai, feedback) {
   if (!globalLogThreadId) return;
 
@@ -98,6 +99,9 @@ async function logFeedbackToGlobalThread(openai, feedback) {
     timestamp: feedback.timestamp
   };
 
+  gptGlobalLogs[feedback.profile] = gptGlobalLogs[feedback.profile] || [];
+  gptGlobalLogs[feedback.profile].push(structured);
+
   try {
     await openai.beta.threads.messages.create(globalLogThreadId, {
       role: "user",
@@ -108,9 +112,14 @@ async function logFeedbackToGlobalThread(openai, feedback) {
   }
 }
 
-// Hämtar lokal cache för feedbacklogg (används för dev/debug)
+// Hämtar lokal feedbacklogg för en profil
 function getUserFeedbackLogs(profile) {
   return userFeedbackLogs[profile] || [];
+}
+
+// Hämtar GPT-loggad data för en profil (för verifiering/debug)
+function getGlobalGPTLogs(profile) {
+  return gptGlobalLogs[profile] || [];
 }
 
 module.exports = {
@@ -118,5 +127,6 @@ module.exports = {
   fetchExercises,
   logFeedback,
   logFeedbackToGlobalThread,
-  getUserFeedbackLogs
+  getUserFeedbackLogs,
+  getGlobalGPTLogs
 };
