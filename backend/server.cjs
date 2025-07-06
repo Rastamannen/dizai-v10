@@ -1,5 +1,3 @@
-// server.cjs – DizAí v1.7 backend med hybridloggning
-
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
@@ -134,21 +132,18 @@ ${refTrans.text}`
       timestamp: new Date().toISOString(),
     };
 
-    // 🔁 Logga till GPT
     await threadManager.logFeedback(openai, ASSISTANT_ID, threadKey, feedbackObject);
-
-    // ✅ Legacy loggning
+    await threadManager.logFeedbackToGlobalThread(openai, feedbackObject);
     await db.saveFeedback(feedbackObject);
 
-    // ✅ Ny loggning till interaction_log
     await db.saveInteraction({
       profile,
-      scenarioId: exerciseSetId, // använder setId som scenarioId
+      scenarioId: exerciseSetId,
       exerciseSetId,
       exerciseId,
-      stepId: exerciseId, // här likställs stepId med exerciseId (kan ändras)
+      stepId: exerciseId,
       role: "user",
-      stepType: "repeat", // eller "dialog" etc. beroende på typ
+      stepType: "repeat",
       prompt: exercise.phrase,
       userInput: userTrans.text,
       refResponse: refTrans.text,
@@ -161,7 +156,6 @@ ${refTrans.text}`
       timestamp: new Date().toISOString()
     });
 
-    // ✅ Ny .jsonl-dump
     db.appendToJsonl(profile, exerciseSetId, {
       timestamp: new Date().toISOString(),
       profile,
@@ -176,7 +170,6 @@ ${refTrans.text}`
       status: getFeedbackStatus(parsed)
     });
 
-    // 🔁 GPT-log
     await axios.post("http://localhost:" + PORT + "/api/gptlog", feedbackObject).catch((e) => {
       console.warn("⚠️ Could not send GPT log:", e.message);
     });
