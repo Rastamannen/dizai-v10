@@ -1,9 +1,17 @@
-// threadManager.js – DizAí v1.9 thread + persistent GPT-loggning + verifiering
+// threadManager.js – DizAí v1.9 thread + persistent GPT-loggning + verifiering + robust JSON-extraktion
 
 let globalLogThreadId = null;
 const threadCache = {};
 const userFeedbackLogs = {};
-const gptGlobalLogs = {}; // 🔍 Ny struktur för verifierbar logg
+const gptGlobalLogs = {};
+
+// 🔍 Extraherar första JSON-objektet från en textsträng (även inbäddad i markdown)
+function extractFirstJsonObject(text) {
+  const match = text.match(/```json\s*([\s\S]+?)\s*```/i) || text.match(/{[\s\S]+}/);
+  const jsonStr = match ? (match[1] || match[0]) : null;
+  if (!jsonStr) throw new Error("❌ No JSON found in GPT response.");
+  return JSON.parse(jsonStr);
+}
 
 // Initierar global GPT-loggtråd
 async function createGlobalLogThread(openai) {
@@ -38,9 +46,7 @@ async function fetchExercises(openai, assistantId, profile, theme, exerciseCache
     const last = messages.data.find(m => m.role === "assistant");
     const content = last.content?.[0]?.text?.value?.trim();
 
-    const jsonMatch = content.match(/```json\s*([\s\S]+?)\s*```/i) || content.match(/{[\s\S]+}/);
-    const jsonString = jsonMatch ? jsonMatch[1] || jsonMatch[0] : null;
-    const parsed = JSON.parse(jsonString);
+    const parsed = extractFirstJsonObject(content);
 
     parsed.exercises = parsed.exercises.map((ex, i) => ({
       ...ex,
