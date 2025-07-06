@@ -97,16 +97,21 @@ function saveFeedback(entry) {
         timestamp,
       ],
       function (err) {
-        if (err) return reject(err);
+        if (err) {
+          console.error("❌ Failed to save feedback_log:", err);
+          return reject(err);
+        }
         resolve(this.lastID);
       }
     );
   });
 }
 
-// Ny loggning till interaction_log
+// Ny loggning till interaction_log med logg och validering
 function saveInteraction(entry) {
   return new Promise((resolve, reject) => {
+    console.log("💾 Saving interaction:", JSON.stringify(entry, null, 2));
+
     const {
       profile,
       scenarioId,
@@ -126,6 +131,15 @@ function saveInteraction(entry) {
       status,
       timestamp,
     } = entry;
+
+    if (!profile || !exerciseSetId || !exerciseId || !stepId) {
+      console.warn("⚠️ Missing critical fields in saveInteraction:", {
+        profile,
+        exerciseSetId,
+        exerciseId,
+        stepId
+      });
+    }
 
     db.run(
       `INSERT INTO interaction_log (
@@ -153,7 +167,10 @@ function saveInteraction(entry) {
         timestamp,
       ],
       function (err) {
-        if (err) return reject(err);
+        if (err) {
+          console.error("❌ Failed to save interaction_log:", err);
+          return reject(err);
+        }
         resolve(this.lastID);
       }
     );
@@ -176,8 +193,12 @@ function appendToJsonl(profile, sessionId, data) {
 function run(sql, params = []) {
   return new Promise((resolve, reject) => {
     db.run(sql, params, function (err) {
-      if (err) reject(err);
-      else resolve(this);
+      if (err) {
+        console.error("❌ SQL run error:", err);
+        reject(err);
+      } else {
+        resolve(this);
+      }
     });
   });
 }
