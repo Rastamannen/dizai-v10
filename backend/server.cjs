@@ -24,7 +24,6 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const gcpTTSClient = new textToSpeech.TextToSpeechClient();
 
 const ASSISTANT_ID = process.env.ASSISTANT_ID;
-const ENABLE_GPT_LOG = process.env.ENABLE_GPT_LOG === "true";
 const exerciseCache = {};
 const lockMap = {};
 
@@ -119,11 +118,7 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
     };
 
     await threadManager.logFeedback(openai, ASSISTANT_ID, threadKey, feedbackObject);
-
-    if (ENABLE_GPT_LOG) {
-      await threadManager.logFeedbackToGlobalThread(openai, feedbackObject);
-    }
-
+    await threadManager.logFeedbackToGlobalThread(openai, feedbackObject);
     await db.saveFeedback(feedbackObject);
 
     await db.saveInteraction({
