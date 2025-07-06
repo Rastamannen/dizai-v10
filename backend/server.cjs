@@ -1,4 +1,4 @@
-// server.cjs – DizAí v1.6.7 backend med GPT-4o fix, feedback-tabell och lokal loggning
+// server.cjs – DizAí v1.7 backend med hybridloggning
 
 const express = require("express");
 const multer = require("multer");
@@ -134,9 +134,49 @@ ${refTrans.text}`
       timestamp: new Date().toISOString(),
     };
 
+    // 🔁 Logga till GPT
     await threadManager.logFeedback(openai, ASSISTANT_ID, threadKey, feedbackObject);
+
+    // ✅ Legacy loggning
     await db.saveFeedback(feedbackObject);
 
+    // ✅ Ny loggning till interaction_log
+    await db.saveInteraction({
+      profile,
+      scenarioId: exerciseSetId, // använder setId som scenarioId
+      exerciseSetId,
+      exerciseId,
+      stepId: exerciseId, // här likställs stepId med exerciseId (kan ändras)
+      role: "user",
+      stepType: "repeat", // eller "dialog" etc. beroende på typ
+      prompt: exercise.phrase,
+      userInput: userTrans.text,
+      refResponse: refTrans.text,
+      ipa: exercise.ipa,
+      phonetic: exercise.phonetic,
+      feedbackType: "pronunciation",
+      feedback: parsed,
+      deviations: parsed.deviations || [],
+      status: getFeedbackStatus(parsed),
+      timestamp: new Date().toISOString()
+    });
+
+    // ✅ Ny .jsonl-dump
+    db.appendToJsonl(profile, exerciseSetId, {
+      timestamp: new Date().toISOString(),
+      profile,
+      exerciseSetId,
+      exerciseId,
+      phrase: exercise.phrase,
+      ipa: exercise.ipa,
+      phonetic: exercise.phonetic,
+      userTranscript: userTrans.text,
+      refTranscript: refTrans.text,
+      feedback: parsed,
+      status: getFeedbackStatus(parsed)
+    });
+
+    // 🔁 GPT-log
     await axios.post("http://localhost:" + PORT + "/api/gptlog", feedbackObject).catch((e) => {
       console.warn("⚠️ Could not send GPT log:", e.message);
     });
