@@ -1,4 +1,4 @@
-// server.js – DizAí backend med GPT-loggstyrning via ENABLE_GPT_LOG
+// server.js – DizAí backend v1.9 med GPT-loggning och strukturerad feedbackanalys
 
 const express = require("express");
 const multer = require("multer");
@@ -115,17 +115,13 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
       deviations: parsed.deviations || [],
       feedback: parsed,
       status: getFeedbackStatus(parsed),
-      timestamp: new Date().toISOString(),
+      timestamp: new Date().toISOString()
     };
 
     await threadManager.logFeedback(openai, ASSISTANT_ID, threadKey, feedbackObject);
 
     if (ENABLE_GPT_LOG) {
-      try {
-        await threadManager.logFeedbackToGlobalThread(openai, feedbackObject);
-      } catch (e) {
-        console.warn("⚠️ Failed to log feedback to GPT:", e.message);
-      }
+      await threadManager.logFeedbackToGlobalThread(openai, feedbackObject);
     }
 
     await db.saveFeedback(feedbackObject);
@@ -162,10 +158,6 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
       refTranscript: refTrans.text,
       feedback: parsed,
       status: getFeedbackStatus(parsed)
-    });
-
-    await axios.post("http://localhost:" + PORT + "/api/gptlog", feedbackObject).catch((e) => {
-      console.warn("⚠️ Could not send GPT log to local endpoint:", e.message);
     });
 
     res.json({ transcript: userTrans.text, feedback: parsed });
