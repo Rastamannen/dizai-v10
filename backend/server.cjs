@@ -1,14 +1,14 @@
-// server.js – DizAí backend v1.9 utan ENABLE_GPT_LOG, alltid GPT-loggning
+// server.js – DizAí backend v2.0, full GPT-loggning som master
 
 const express = require("express");
 const multer = require("multer");
 const cors = require("cors");
-const axios = require("axios");
 const morgan = require("morgan");
 const { OpenAI } = require("openai");
 const textToSpeech = require("@google-cloud/text-to-speech");
 const { File } = require("undici");
 const threadManager = require("./threadManager");
+const { generatePrompt } = require("./promptGenerator");
 
 const app = express();
 const upload = multer();
@@ -77,7 +77,7 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
     console.log("➡️ User:", userTrans.text);
     console.log("✅ Ref:", refTrans.text);
 
-    const { systemPrompt, userPrompt } = require("./promptGenerator").generatePrompt({
+    const { systemPrompt, userPrompt } = generatePrompt({
       stepType: "repeat",
       exercise,
       transcripts: {
@@ -123,12 +123,6 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
     console.error("❌ Analysis error:", err);
     res.json({ transcript: "", feedback: { error: "Error during analysis: " + err.message } });
   }
-});
-
-app.post("/api/gptlog", async (req, res) => {
-  const feedback = req.body;
-  console.log("📡 GPT log received:", JSON.stringify(feedback, null, 2));
-  res.json({ status: "received" });
 });
 
 app.get("/api/tts", async (req, res) => {
