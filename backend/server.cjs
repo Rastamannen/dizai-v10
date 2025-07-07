@@ -1,4 +1,4 @@
-// server.js – DizAí backend v2.0, full GPT-loggning som master
+// server.js – DizAí backend v2.1, full GPT-loggning som master + uttalsanalys med fonemnivå och status
 
 const express = require("express");
 const multer = require("multer");
@@ -26,6 +26,9 @@ const exerciseCache = {};
 const lockMap = {};
 
 function getFeedbackStatus(parsed) {
+  if (parsed?.status === "perfect" || parsed?.status === "almost" || parsed?.status === "tryagain") {
+    return parsed.status;
+  }
   const devs = parsed?.deviations || [];
   if (!devs.length) return "perfect";
   if (devs.some(d => d.severity === "major")) return "tryagain";
@@ -98,7 +101,7 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
 
     const parsed = chat.choices?.[0]?.message?.content
       ? JSON.parse(chat.choices[0].message.content)
-      : { native: "", attempt: "", deviations: [] };
+      : { native: "", attempt: "", deviations: [], status: "tryagain", comment: "" };
 
     const feedbackObject = {
       profile,
@@ -112,6 +115,7 @@ app.post("/api/analyze", upload.fields([{ name: "audio" }, { name: "ref" }]), as
       deviations: parsed.deviations || [],
       feedback: parsed,
       status: getFeedbackStatus(parsed),
+      comment: parsed.comment || "",
       timestamp: new Date().toISOString()
     };
 
