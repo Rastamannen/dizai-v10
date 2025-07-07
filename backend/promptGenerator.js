@@ -1,4 +1,4 @@
-// promptGenerator.js – DizAí v2.0 – GPT-baserad promptgenerering för uttal & översättning
+// promptGenerator.js – DizAí v2.1 – Förbättrad GPT-baserad promptgenerering med fonemnivåfeedback
 
 function escape(text) {
   return String(text || "").replace(/\s+/g, " ").trim();
@@ -16,26 +16,30 @@ function generatePrompt({ stepType, exercise, transcripts, profile = "default" }
       return {
         systemPrompt: `
 You are a pronunciation analysis engine for learners of European Portuguese.
-Analyze the user's attempt to pronounce a given phrase. Focus on phonetic accuracy.
+Your task is to analyze a user's pronunciation of a given phrase. Focus on phonetic accuracy.
 
-Respond with valid JSON ONLY, using this structure:
+Return ONLY valid JSON in this exact structure:
 {
-  "native": "string",
-  "attempt": "string",
-  "deviations": [
+  "native": "string",         // The reference phrase
+  "attempt": "string",        // What the user said
+  "deviations": [             // List of detected deviations
     {
-      "word": "string",
+      "word": "string",       // Word in the phrase with deviation
+      "phoneme": "string",    // Specific phoneme with issue
       "severity": "minor" | "major",
-      "note": "string"
+      "note": "string"        // Brief description of the issue
     }
-  ]
+  ],
+  "status": "perfect" | "almost" | "tryagain",  // Overall rating
+  "comment": "string"         // One-sentence feedback summary
 }
 
-Evaluation rules:
-- Compare the user's attempt with the original phrase, IPA and phonetic spelling.
-- Identify dropped syllables, wrong sounds, and mispronounced phonemes.
-- Always return well-formed JSON. Never include markdown or extra text.
-- Even if user's speech is nonsense, return the closest analysis in format above.
+Rules:
+- Use the IPA and phonetic spelling as guides to assess the user's accuracy.
+- If user says something unrelated, still try to analyze the closest match.
+- Always include status and comment, even if no deviations are found.
+- NEVER include markdown, explanations, or text outside the JSON.
+- JSON must be valid and parseable. No markdown formatting.
 `.trim(),
 
         userPrompt: `
@@ -56,27 +60,29 @@ ${refTranscript}
     case "translate":
       return {
         systemPrompt: `
-You are a grammar evaluator for learners of European Portuguese.
-Your job is to analyze a user's translation attempt and give structured feedback.
+You are a grammar and translation evaluator for learners of European Portuguese.
+Your job is to analyze a user's translation attempt and provide structured feedback.
 
-Return ONLY valid JSON in this structure:
+Return ONLY valid JSON using this structure:
 {
-  "reference": "string",
-  "attempt": "string",
+  "reference": "string",   // Correct translation
+  "attempt": "string",     // User's version
   "errors": [
     {
-      "word": "string",
+      "word": "string",    // Word or phrase with an issue
       "type": "grammar" | "vocabulary" | "omission" | "word_order",
-      "note": "string"
+      "note": "string"     // Explanation of the problem
     }
-  ]
+  ],
+  "status": "perfect" | "almost" | "tryagain",  // Overall quality
+  "comment": "string"      // Brief user-friendly feedback
 }
 
 Evaluation instructions:
-- Compare the user's attempt with the correct phrase.
-- Highlight verb conjugation errors, wrong vocabulary, missing words or syntax issues.
-- Do not output anything besides the valid JSON. No explanations.
-- Be strict, detailed, and helpful.
+- Compare the user's translation with the reference.
+- Identify incorrect verb forms, missing or misplaced words, or wrong vocabulary.
+- NEVER include anything outside the JSON object.
+- Always return well-formed JSON, even if the user's input is very poor.
 `.trim(),
 
         userPrompt: `
