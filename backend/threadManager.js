@@ -1,11 +1,11 @@
-// threadManager.js – DizAí v1.9 thread + persistent GPT-loggning + verifiering + robust JSON-extraktion
+// threadManager.js – DizAí v2.0 GPT-integrerad logik, verifierad loggning, robust JSON-hantering
 
 let globalLogThreadId = null;
 const threadCache = {};
 const userFeedbackLogs = {};
 const gptGlobalLogs = {};
 
-// 🔍 Extraherar första JSON-objektet från en textsträng (även inbäddad i markdown)
+// 🔍 Extraherar första JSON-objektet från en GPT-response
 function extractFirstJsonObject(text) {
   const match = text.match(/```json\s*([\s\S]+?)\s*```/i) || text.match(/{[\s\S]+}/);
   const jsonStr = match ? (match[1] || match[0]) : null;
@@ -13,7 +13,7 @@ function extractFirstJsonObject(text) {
   return JSON.parse(jsonStr);
 }
 
-// Initierar global GPT-loggtråd
+// Initierar en global GPT-loggtråd för struktur
 async function createGlobalLogThread(openai) {
   if (globalLogThreadId) return;
   const thread = await openai.beta.threads.create();
@@ -21,7 +21,7 @@ async function createGlobalLogThread(openai) {
   console.log("🧾 Global log thread created:", globalLogThreadId);
 }
 
-// Hämtar övningsset från GPT baserat på tema + profil
+// Hämtar övningsset från GPT (temabaserat)
 async function fetchExercises(openai, assistantId, profile, theme, exerciseCache, lockMap) {
   const cacheKey = `${profile}::${theme}`;
   if (lockMap[cacheKey]) return exerciseCache[cacheKey] || { exerciseSetId: null, exercises: [] };
@@ -31,7 +31,7 @@ async function fetchExercises(openai, assistantId, profile, theme, exerciseCache
     const thread = await openai.beta.threads.create();
     threadCache[cacheKey] = thread.id;
 
-    const prompt = `Johan and Petra are learning European Portuguese together using DizAí. Johan is training on the theme "${theme}". Return a new exercise set in strict JSON format with a unique "exerciseSetId" starting with "${theme}-". Use European Portuguese only. Include IPA and a user-friendly phonetic spelling. Avoid generic topics. Each exercise must have a unique "exerciseId".`;
+    const prompt = `Johan and Petra are learning European Portuguese using DizAí. Johan is now training on the theme "${theme}". Return a new exercise set in strict JSON format with a unique "exerciseSetId" starting with "${theme}-". Each exercise must include a unique "exerciseId", an IPA transcription, and an easy-to-read phonetic transcription. Use European Portuguese only.`;
 
     await openai.beta.threads.messages.create(thread.id, { role: "user", content: prompt });
     const run = await openai.beta.threads.runs.create(thread.id, { assistant_id: assistantId });
@@ -63,7 +63,7 @@ async function fetchExercises(openai, assistantId, profile, theme, exerciseCache
   }
 }
 
-// Loggar feedback till personlig + global GPT-tråd (interaktivt syfte)
+// Loggar feedback till personlig GPT-tråd och global loggtråd
 async function logFeedback(openai, assistantId, threadKey, feedback) {
   const { profile } = feedback;
   userFeedbackLogs[profile] = userFeedbackLogs[profile] || [];
@@ -76,16 +76,15 @@ async function logFeedback(openai, assistantId, threadKey, feedback) {
     if (threadId) {
       await openai.beta.threads.messages.create(threadId, { role: "user", content: logEntry });
     }
-
     if (globalLogThreadId) {
       await openai.beta.threads.messages.create(globalLogThreadId, { role: "user", content: logEntry });
     }
   } catch (err) {
-    console.warn("⚠️ Could not push verbose log to GPT threads:", err.message);
+    console.warn("⚠️ GPT thread log failed:", err.message);
   }
 }
 
-// 🔥 Skriver strukturerad logg till GPT:s globala tråd + intern verifieringsstruktur
+// Loggar strukturerad feedback (v1-schema) till global tråd och intern cache
 async function logFeedbackToGlobalThread(openai, feedback) {
   if (!globalLogThreadId) return;
 
@@ -114,16 +113,16 @@ async function logFeedbackToGlobalThread(openai, feedback) {
       content: `FEEDBACK_LOG:\n${JSON.stringify(structured)}`
     });
   } catch (err) {
-    console.warn("⚠️ Could not send structured log to GPT global thread:", err.message);
+    console.warn("⚠️ Structured GPT log failed:", err.message);
   }
 }
 
-// Hämtar lokal feedbacklogg för en profil
+// Hämtar lokal användarlogg för debug/speglad vy
 function getUserFeedbackLogs(profile) {
   return userFeedbackLogs[profile] || [];
 }
 
-// Hämtar GPT-loggad data för en profil (för verifiering/debug)
+// Hämtar GPT:s strukturerade logg för en viss profil (debug/analys)
 function getGlobalGPTLogs(profile) {
   return gptGlobalLogs[profile] || [];
 }
