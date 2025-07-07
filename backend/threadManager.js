@@ -1,4 +1,4 @@
-// threadManager.js – DizAí v2.0 GPT-integrerad logik, verifierad loggning, robust JSON-hantering
+// threadManager.js – DizAí v2.1 GPT-integrerad logik, verifierad loggning, robust JSON-hantering
 
 let globalLogThreadId = null;
 const threadCache = {};
@@ -100,7 +100,8 @@ async function logFeedbackToGlobalThread(openai, feedback) {
     refTranscript: feedback.refTranscript,
     feedbackType: "pronunciation",
     deviations: feedback.deviations || [],
-    status: feedback.status,
+    status: feedback.status || "tryagain",
+    comment: feedback.comment || "",
     timestamp: feedback.timestamp
   };
 
