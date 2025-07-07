@@ -1,4 +1,4 @@
-// promptGenerator.js – Genererar situationsanpassade GPT-promptar för DizAí
+// promptGenerator.js – DizAí v2.0 – GPT-baserad promptgenerering för uttal & översättning
 
 function escape(text) {
   return String(text || "").replace(/\s+/g, " ").trim();
@@ -15,37 +15,37 @@ function generatePrompt({ stepType, exercise, transcripts, profile = "default" }
     case "repeat":
       return {
         systemPrompt: `
-You are a pronunciation analysis engine for European Portuguese.
-Your task is to analyze how well a user pronounces a given phrase.
+You are a pronunciation analysis engine for learners of European Portuguese.
+Analyze the user's attempt to pronounce a given phrase. Focus on phonetic accuracy.
 
-Return ONLY valid JSON in this format:
+Respond with valid JSON ONLY, using this structure:
 {
   "native": "string",
   "attempt": "string",
   "deviations": [
     {
       "word": "string",
-      "severity": "minor"|"major",
+      "severity": "minor" | "major",
       "note": "string"
     }
   ]
 }
 
-Guidelines:
-- Compare the user's attempt to the original phrase and IPA.
-- Identify missing, mispronounced or replaced phonemes.
-- Always return valid JSON even if the input is nonsense.
-- Do NOT explain, justify or wrap in markdown.
+Evaluation rules:
+- Compare the user's attempt with the original phrase, IPA and phonetic spelling.
+- Identify dropped syllables, wrong sounds, and mispronounced phonemes.
+- Always return well-formed JSON. Never include markdown or extra text.
+- Even if user's speech is nonsense, return the closest analysis in format above.
 `.trim(),
 
         userPrompt: `
-Analyze this pronunciation attempt.
+Analyze this pronunciation:
 
-Phrase: ${phrase}
+Target phrase: ${phrase}
 IPA: ${ipa}
 Phonetic: ${phonetic}
 
-User said:
+User transcript:
 ${userTranscript}
 
 Reference transcript:
@@ -56,33 +56,33 @@ ${refTranscript}
     case "translate":
       return {
         systemPrompt: `
-You are a grammar and translation evaluator for learners of European Portuguese.
-Your task is to assess the quality of a user's translation attempt from English to Portuguese.
+You are a grammar evaluator for learners of European Portuguese.
+Your job is to analyze a user's translation attempt and give structured feedback.
 
-Return ONLY valid JSON in this format:
+Return ONLY valid JSON in this structure:
 {
   "reference": "string",
   "attempt": "string",
   "errors": [
     {
       "word": "string",
-      "type": "grammar"|"vocabulary"|"omission"|"word_order",
+      "type": "grammar" | "vocabulary" | "omission" | "word_order",
       "note": "string"
     }
   ]
 }
 
-Guidelines:
-- Focus on grammatical accuracy and vocabulary usage.
-- Highlight incorrect verb forms, missing words, or wrong word choices.
-- Don't return any explanation outside the JSON structure.
-- Be strict but helpful.
+Evaluation instructions:
+- Compare the user's attempt with the correct phrase.
+- Highlight verb conjugation errors, wrong vocabulary, missing words or syntax issues.
+- Do not output anything besides the valid JSON. No explanations.
+- Be strict, detailed, and helpful.
 `.trim(),
 
         userPrompt: `
-Evaluate this translation attempt.
+Evaluate this translation:
 
-English sentence:
+English source:
 ${exercise.translation}
 
 Correct Portuguese:
