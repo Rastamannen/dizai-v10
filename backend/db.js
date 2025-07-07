@@ -1,26 +1,26 @@
-// db.js – avskalad version utan lokal lagring (no-op implementering)
+// db.js – DizAí v2.0 GPT-only arkitektur, ingen lokal lagring
 
 function ensureInitialized() {
-  console.log("🧹 Skipping SQLite initialization – using GPT-only logging.");
+  console.log("🧹 Skipping SQLite initialization – GPT-only architecture enabled.");
   return Promise.resolve();
 }
 
 function saveFeedback(entry) {
-  console.log("🪪 Skipping saveFeedback – GPT handles all feedback logging.");
+  console.log("🪪 Feedback logging bypassed – GPT is master. Entry:", entry?.exerciseId || "unknown");
   return Promise.resolve();
 }
 
 function saveInteraction(entry) {
-  console.log("🗣️ Skipping saveInteraction – GPT handles all interaction logging.");
+  console.log("🗣️ Interaction logging bypassed – GPT is master. Step:", entry?.stepId || "n/a");
   return Promise.resolve();
 }
 
 function appendToJsonl(profile, sessionId, data) {
-  console.log(`📄 Skipping appendToJsonl for profile ${profile}, session ${sessionId}`);
+  console.log(`📄 JSONL log skipped – profile=${profile}, session=${sessionId}`);
 }
 
 function run(sql, params = []) {
-  console.log("⛔ Skipping direct SQL execution – db is deprecated.");
+  console.log("⛔ Direct SQL access disabled – database removed.");
   return Promise.resolve();
 }
 
